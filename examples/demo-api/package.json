@@ -1,17 +1,14 @@
 {
-  "name": "@x402-ton/demo-api",
-  "version": "0.1.0",
+  "name": "x402-ton-demo-api",
   "private": true,
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "dev": "tsx src/index.ts"
   },
   "dependencies": {
+    "@x402-ton/common": "*",
     "@x402-ton/server": "*",
     "express": "^4.21.0"
   },

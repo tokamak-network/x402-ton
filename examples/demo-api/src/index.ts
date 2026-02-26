@@ -1,81 +1,78 @@
 import express from "express";
+import { parseEther } from "viem";
 import { paymentMiddleware } from "@x402-ton/server";
 
-const PORT = parseInt(process.env.PORT ?? "3000", 10);
-const FACILITATOR_URL = process.env.FACILITATOR_URL ?? "http://localhost:4402";
-const PAY_TO = (process.env.PAY_TO ?? "0x0000000000000000000000000000000000000000") as `0x${string}`;
-
 const app = express();
-app.use(express.json());
+const port = parseInt(process.env.DEMO_API_PORT ?? "4403");
+const payTo = process.env.PAY_TO_ADDRESS as `0x${string}`;
+const facilitatorUrl = process.env.FACILITATOR_URL ?? "http://localhost:4402";
+
+if (!payTo) {
+  console.error("Set PAY_TO_ADDRESS env var");
+  process.exit(1);
+}
 
 app.use(
   paymentMiddleware({
-    facilitatorUrl: FACILITATOR_URL,
+    facilitatorUrl,
     routes: {
       "GET /api/weather": {
-        price: "1000000000000000",
-        payTo: PAY_TO,
-        description: "Current weather data",
+        price: parseEther("0.001").toString(),
+        payTo,
+        description: "Current weather data (0.001 TON)",
+        mimeType: "application/json",
       },
       "GET /api/joke": {
-        price: "100000000000000",
-        payTo: PAY_TO,
-        description: "A random joke",
+        price: parseEther("0.0001").toString(),
+        payTo,
+        description: "A random joke (0.0001 TON)",
+        mimeType: "application/json",
       },
       "GET /api/premium/[id]": {
-        price: "10000000000000000",
-        payTo: PAY_TO,
-        description: "Premium content by ID",
+        price: parseEther("0.01").toString(),
+        payTo,
+        description: "Premium content (0.01 TON)",
+        mimeType: "application/json",
       },
     },
   })
 );
+
+app.get("/", (_req, res) => {
+  res.json({
+    name: "x402-TON Demo API",
+    endpoints: {
+      "/api/weather": "0.001 TON",
+      "/api/joke": "0.0001 TON",
+      "/api/premium/:id": "0.01 TON",
+      "/api/free": "free",
+    },
+  });
+});
 
 app.get("/api/free", (_req, res) => {
   res.json({ message: "This endpoint is free!", timestamp: Date.now() });
 });
 
 app.get("/api/weather", (req, res) => {
-  res.json({
-    payer: req.x402Payer,
-    location: "San Francisco, CA",
-    temperature: 18,
-    unit: "celsius",
-    condition: "Partly cloudy",
-    humidity: 65,
-    timestamp: Date.now(),
-  });
+  res.json({ location: "Thanos Sepolia", temperature: "42°C", condition: "Powered by TON", payer: (req as any).x402Payer });
 });
 
-app.get("/api/joke", (req, res) => {
+app.get("/api/joke", (_req, res) => {
   const jokes = [
-    "Why do programmers prefer dark mode? Because light attracts bugs.",
-    "There are 10 kinds of people: those who understand binary and those who don't.",
-    "A SQL query walks into a bar, sees two tables, and asks: 'Can I JOIN you?'",
+    "Why do blockchain devs never get cold? They have too many layers.",
+    "What did the smart contract say to the EOA? You have no code.",
+    "Why did the transaction fail? It ran out of gas at the worst time.",
   ];
-  res.json({
-    payer: req.x402Payer,
-    joke: jokes[Math.floor(Math.random() * jokes.length)],
-  });
+  res.json({ joke: jokes[Math.floor(Math.random() * jokes.length)] });
 });
 
 app.get("/api/premium/:id", (req, res) => {
-  res.json({
-    payer: req.x402Payer,
-    id: req.params.id,
-    content: `Premium content for item ${req.params.id}`,
-    accessLevel: "premium",
-    timestamp: Date.now(),
-  });
+  res.json({ id: req.params.id, content: "Premium content unlocked via x402 TON payment", payer: (req as any).x402Payer });
 });
 
-app.listen(PORT, () => {
-  console.log(`Demo API server running on port ${PORT}`);
-  console.log(`Facilitator: ${FACILITATOR_URL}`);
-  console.log(`Pay-to address: ${PAY_TO}`);
-  console.log(`\nEndpoints:`);
-  console.log(`  GET /api/free          — free`);
-  console.log(`  GET /api/weather       — 0.001 TON`);
-  console.log(`  GET /api/joke          — 0.0001 TON`);
-  console.log(`  GET /api/premium/:id   — 0.01 TON`);
+app.listen(port, () => {
+  console.log(`x402-TON demo API on port ${port}`);
+  console.log(`Facilitator: ${facilitatorUrl}`);
+  console.log(`PayTo: ${payTo}`);
 });
