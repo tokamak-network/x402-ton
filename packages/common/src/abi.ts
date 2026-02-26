@@ -130,3 +130,98 @@ export const FACILITATOR_ABI = [
   },
   { type: "receive", stateMutability: "payable" },
 ] as const;
+
+const USER_OP_COMPONENTS = [
+  { name: "sender", type: "address" },
+  { name: "nonce", type: "uint256" },
+  { name: "initCode", type: "bytes" },
+  { name: "callData", type: "bytes" },
+  { name: "callGasLimit", type: "uint256" },
+  { name: "verificationGasLimit", type: "uint256" },
+  { name: "preVerificationGas", type: "uint256" },
+  { name: "maxFeePerGas", type: "uint256" },
+  { name: "maxPriorityFeePerGas", type: "uint256" },
+  { name: "paymasterAndData", type: "bytes" },
+  { name: "signature", type: "bytes" },
+] as const;
+
+export const ENTRY_POINT_ABI = [
+  {
+    type: "function",
+    name: "getNonce",
+    inputs: [
+      { name: "sender", type: "address" },
+      { name: "key", type: "uint192" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getUserOpHash",
+    inputs: [{ name: "userOp", type: "tuple", components: USER_OP_COMPONENTS }],
+    outputs: [{ name: "", type: "bytes32" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "handleOps",
+    inputs: [
+      { name: "ops", type: "tuple[]", components: USER_OP_COMPONENTS },
+      { name: "beneficiary", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "depositTo",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [],
+    stateMutability: "payable",
+  },
+] as const;
+
+export const STEALTH_ACCOUNT_FACTORY_ABI = [
+  {
+    type: "function",
+    name: "createAccount",
+    inputs: [
+      { name: "_owner", type: "address" },
+      { name: "_salt", type: "uint256" },
+    ],
+    outputs: [{ name: "account", type: "address" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getAddress",
+    inputs: [
+      { name: "_owner", type: "address" },
+      { name: "_salt", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+] as const;
+
+export const STEALTH_ACCOUNT_ABI = [
+  {
+    type: "function",
+    name: "execute",
+    inputs: [
+      { name: "dest", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "func", type: "bytes" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
