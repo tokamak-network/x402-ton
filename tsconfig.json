@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {},
+  "references": [
+    { "path": "packages/common" },
+    { "path": "packages/facilitator" },
+    { "path": "packages/server" },
+    { "path": "packages/client" },
+    { "path": "packages/cli" }
+  ]
+}

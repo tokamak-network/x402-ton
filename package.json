@@ -1,0 +1,15 @@
+{
+  "name": "x402-ton",
+  "private": true,
+  "packageManager": "npm@10.8.2",
+  "workspaces": ["packages/*", "examples/*"],
+  "scripts": {
+    "build": "turbo build",
+    "clean": "turbo clean",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  }
+}
