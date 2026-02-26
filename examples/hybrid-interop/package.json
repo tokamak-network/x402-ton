@@ -1,0 +1,16 @@
+{
+  "name": "x402-ton-hybrid-interop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@x402/core": "^2.5.0",
+    "@x402-ton/scheme": "*",
+    "@x402-ton/common": "*",
+    "@x402-ton/client": "*",
+    "viem": "^2.30.0",
+    "tsx": "^4.0.0"
+  }
+}

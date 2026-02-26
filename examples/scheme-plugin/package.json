@@ -1,0 +1,15 @@
+{
+  "name": "x402-ton-scheme-plugin-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@x402/core": "^2.5.0",
+    "@x402-ton/scheme": "*",
+    "@x402-ton/common": "*",
+    "viem": "^2.30.0",
+    "tsx": "^4.0.0"
+  }
+}
