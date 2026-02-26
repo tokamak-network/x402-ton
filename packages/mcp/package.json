@@ -1,0 +1,38 @@
+{
+  "name": "@x402-ton/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for x402-ton payments — enables AI agents to pay for APIs on Thanos",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "x402-ton-mcp": "dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@x402-ton/common": "*",
+    "@x402-ton/client": "*",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "viem": "^2.30.0",
+    "zod": "^3.24.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/x402-ton",
+    "directory": "packages/mcp"
+  }
+}
