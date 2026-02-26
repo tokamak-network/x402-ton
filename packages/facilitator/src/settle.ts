@@ -1,37 +1,17 @@
-import { type PublicClient, type WalletClient } from "viem";
-import {
-  type SettleRequest,
-  type SettlementResponse,
-  FACILITATOR_ABI,
-  CONTRACTS,
-  CAIP2_THANOS_SEPOLIA,
-} from "@x402-ton/common";
+import { type PublicClient, type WalletClient, type Account, type Transport, type Chain } from "viem";
+import { type SettleRequest, type SettlementResponse, FACILITATOR_ABI, CAIP2_THANOS_SEPOLIA } from "@x402-ton/common";
 
 export async function settlePayment(
   publicClient: PublicClient,
-  walletClient: WalletClient,
+  walletClient: WalletClient<Transport, Chain, Account>,
+  facilitatorAddress: `0x${string}`,
   request: SettleRequest
 ): Promise<SettlementResponse> {
-  const { paymentPayload, paymentRequirements } = request;
-  const { authorization, signature } = paymentPayload.payload;
-  const network = CAIP2_THANOS_SEPOLIA;
-
-  if (paymentPayload.network !== network) {
-    return { success: false, network, errorReason: "Unsupported network" };
-  }
-
-  if (authorization.to !== paymentRequirements.payTo) {
-    return { success: false, network, errorReason: "Recipient mismatch" };
-  }
-
-  const account = walletClient.account;
-  if (!account) {
-    return { success: false, network, errorReason: "Wallet account not configured" };
-  }
+  const { authorization, signature } = request.paymentPayload.payload;
 
   try {
     const hash = await walletClient.writeContract({
-      address: CONTRACTS.facilitator,
+      address: facilitatorAddress,
       abi: FACILITATOR_ABI,
       functionName: "settle",
       args: [
@@ -42,30 +22,22 @@ export async function settlePayment(
         authorization.nonce,
         signature,
       ],
-      account,
-      chain: publicClient.chain,
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
     if (receipt.status === "reverted") {
-      return {
-        success: false,
-        network,
-        transaction: hash,
-        payer: authorization.from,
-        errorReason: "Transaction reverted",
-      };
+      return { success: false, network: CAIP2_THANOS_SEPOLIA, errorReason: "Transaction reverted" };
     }
 
     return {
       success: true,
-      network,
-      transaction: hash,
       payer: authorization.from,
+      transaction: hash,
+      network: CAIP2_THANOS_SEPOLIA,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown settlement error";
-    return { success: false, network, errorReason: message };
+    const message = err instanceof Error ? err.message : "Settlement failed";
+    return { success: false, network: CAIP2_THANOS_SEPOLIA, errorReason: message };
   }
 }

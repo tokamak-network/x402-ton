@@ -1,51 +1,39 @@
 import { type PublicClient } from "viem";
-import {
-  type VerifyRequest,
-  type VerifyResponse,
-  FACILITATOR_ABI,
-  CONTRACTS,
-  CAIP2_THANOS_SEPOLIA,
-} from "@x402-ton/common";
+import { type VerifyRequest, type VerifyResponse, FACILITATOR_ABI } from "@x402-ton/common";
 
 export async function verifyPayment(
-  client: PublicClient,
+  publicClient: PublicClient,
+  facilitatorAddress: `0x${string}`,
   request: VerifyRequest
 ): Promise<VerifyResponse> {
-  const { paymentPayload, paymentRequirements } = request;
-  const { authorization, signature } = paymentPayload.payload;
+  const { authorization, signature } = request.paymentPayload.payload;
+  const requirement = request.paymentRequirements;
 
-  if (paymentPayload.network !== CAIP2_THANOS_SEPOLIA) {
-    return { isValid: false, invalidReason: "Unsupported network" };
+  if (BigInt(authorization.amount) < BigInt(requirement.maxAmountRequired)) {
+    return { isValid: false, invalidReason: "Amount too low" };
   }
 
-  if (authorization.to !== paymentRequirements.payTo) {
-    return { isValid: false, invalidReason: "Recipient mismatch" };
+  if (authorization.to.toLowerCase() !== requirement.payTo.toLowerCase()) {
+    return { isValid: false, invalidReason: "Wrong recipient" };
   }
 
-  if (BigInt(authorization.amount) < BigInt(paymentRequirements.maxAmountRequired)) {
-    return { isValid: false, invalidReason: "Insufficient amount" };
-  }
+  const [valid, reason] = (await publicClient.readContract({
+    address: facilitatorAddress,
+    abi: FACILITATOR_ABI,
+    functionName: "verify",
+    args: [
+      authorization.from,
+      authorization.to,
+      BigInt(authorization.amount),
+      BigInt(authorization.deadline),
+      authorization.nonce,
+      signature,
+    ],
+  })) as [boolean, string];
 
-  try {
-    const [valid, reason] = await client.readContract({
-      address: CONTRACTS.facilitator,
-      abi: FACILITATOR_ABI,
-      functionName: "verify",
-      args: [
-        authorization.from,
-        authorization.to,
-        BigInt(authorization.amount),
-        BigInt(authorization.deadline),
-        authorization.nonce,
-        signature,
-      ],
-    });
-
-    return valid
-      ? { isValid: true, payer: authorization.from }
-      : { isValid: false, invalidReason: reason };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown verification error";
-    return { isValid: false, invalidReason: message };
-  }
+  return {
+    isValid: valid,
+    invalidReason: valid ? undefined : reason,
+    payer: valid ? authorization.from : undefined,
+  };
 }
