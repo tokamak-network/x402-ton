@@ -1,9 +1,29 @@
 {
   "name": "@x402-ton/facilitator",
   "version": "0.1.0",
+  "description": "Facilitator service for x402-ton payment settlement on TON",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/x402-ton",
+    "directory": "packages/facilitator"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/lib.js",
+      "types": "./dist/lib.d.ts",
+      "default": "./dist/lib.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
@@ -12,12 +32,16 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@x402-ton/common": "*",
-    "express": "^4.21.0",
-    "viem": "^2.30.0"
+    "@x402-ton/common": "*"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0",
+    "viem": ">=2.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "tsx": "^4.0.0"
+    "express": "^4.21.0",
+    "tsx": "^4.0.0",
+    "viem": "^2.30.0"
   }
 }

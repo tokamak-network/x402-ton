@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { thanosSepolia } from "@x402-ton/common";
 import { verifyPayment } from "./verify.js";
 import { settlePayment } from "./settle.js";
+import { settleGasless } from "./gasless.js";
 
 export interface FacilitatorServerConfig {
   privateKey: `0x${string}`;
@@ -36,6 +37,16 @@ export function createFacilitatorServer(config: FacilitatorServerConfig) {
   app.post("/settle", async (req, res) => {
     try {
       const result = await settlePayment(publicClient, walletClient, config.facilitatorAddress, req.body);
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Internal error";
+      res.status(500).json({ success: false, network: "eip155:111551119090", errorReason: message });
+    }
+  });
+
+  app.post("/settle-gasless", async (req, res) => {
+    try {
+      const result = await settleGasless(publicClient, walletClient, config.facilitatorAddress, req.body);
       res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Internal error";

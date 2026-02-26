@@ -13,7 +13,3 @@ const app = createFacilitatorServer({ privateKey, facilitatorAddress, port });
 app.listen(port, () => {
   console.log(`x402-TON facilitator running on port ${port}`);
 });
-
-export { createFacilitatorServer } from "./server.js";
-export { verifyPayment } from "./verify.js";
-export { settlePayment } from "./settle.js";
