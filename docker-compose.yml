@@ -1,0 +1,11 @@
+services:
+  facilitator:
+    build: .
+    ports:
+      - "${FACILITATOR_PORT:-4402}:4402"
+    environment:
+      - FACILITATOR_PRIVATE_KEY=${FACILITATOR_PRIVATE_KEY}
+      - FACILITATOR_CONTRACT=${FACILITATOR_CONTRACT:-0x0af530d6d66947aD930a7d1De60E58c43D40a308}
+      - FACILITATOR_PORT=4402
+      - THANOS_RPC_URL=${THANOS_RPC_URL:-https://rpc.thanos-sepolia.tokamak.network}
+    restart: unless-stopped

@@ -6,6 +6,8 @@
     { "path": "packages/facilitator" },
     { "path": "packages/server" },
     { "path": "packages/client" },
-    { "path": "packages/cli" }
+    { "path": "packages/cli" },
+    { "path": "packages/scheme" },
+    { "path": "packages/mcp" }
   ]
 }
