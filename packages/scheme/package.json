@@ -1,0 +1,46 @@
+{
+  "name": "@x402-ton/scheme",
+  "version": "0.1.0",
+  "description": "Payment scheme implementation for x402-ton protocol integration",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/x402-ton",
+    "directory": "packages/scheme"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@x402-ton/common": "*",
+    "@x402-ton/client": "*",
+    "@x402-ton/facilitator": "*"
+  },
+  "peerDependencies": {
+    "@x402/core": ">=2.5.0",
+    "viem": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@x402/core": "^2.5.0",
+    "viem": "^2.30.0"
+  }
+}
