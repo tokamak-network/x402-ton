@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseEther, formatEther, createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { thanosSepolia, CONTRACTS, setFacilitatorAddress } from "@x402-ton/common";
+import { thanosSepolia, CONTRACTS } from "@x402-ton/common";
 import { createX402TonFetch, deposit, getBalance } from "@x402-ton/client";
 
 const [,, command, ...args] = process.argv;
@@ -13,16 +13,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const facilitatorAddr = process.env.FACILITATOR_CONTRACT as `0x${string}`;
-  if (facilitatorAddr) setFacilitatorAddress(facilitatorAddr);
-
   const account = privateKeyToAccount(privateKey);
   const publicClient = createPublicClient({ chain: thanosSepolia, transport: http() });
   const walletClient = createWalletClient({ account, chain: thanosSepolia, transport: http() });
 
   switch (command) {
     case "balance": {
-      const bal = await getBalance(publicClient, account.address, facilitatorAddr);
+      const bal = await getBalance(publicClient, account.address, CONTRACTS.facilitator);
       console.log(`Facilitator balance: ${formatEther(bal)} TON`);
       const native = await publicClient.getBalance({ address: account.address });
       console.log(`Wallet balance: ${formatEther(native)} TON`);
@@ -32,7 +29,7 @@ async function main(): Promise<void> {
     case "deposit": {
       const amount = args[0] ?? "1";
       console.log(`Depositing ${amount} TON...`);
-      const hash = await deposit(walletClient, parseEther(amount), facilitatorAddr);
+      const hash = await deposit(walletClient, parseEther(amount), CONTRACTS.facilitator);
       console.log(`TX: ${hash}`);
       break;
     }
@@ -43,7 +40,7 @@ async function main(): Promise<void> {
 
       const x402Fetch = createX402TonFetch({
         account, publicClient, walletClient,
-        facilitatorAddress: facilitatorAddr,
+        facilitatorAddress: CONTRACTS.facilitator,
         autoDeposit: true,
       });
 
