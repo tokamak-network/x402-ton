@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { privateKeyToAccount } from "viem/accounts";
-import { createPublicClient, createWalletClient, http } from "viem";
+import { createPublicClient, createWalletClient, http, getAddress } from "viem";
 import { x402Client } from "@x402/core/client";
 import { x402Facilitator } from "@x402/core/facilitator";
 import { x402ResourceServer } from "@x402/core/server";
@@ -49,7 +49,7 @@ describe("x402-ton scheme unit tests", () => {
       expect(internal.resource).toBe("https://example.com/api/data");
       expect(internal.description).toBe("Test resource");
       expect(internal.mimeType).toBe("application/json");
-      expect(internal.payTo).toBe(coreRequirements.payTo);
+      expect(internal.payTo).toBe(getAddress(coreRequirements.payTo));
       expect(internal.maxTimeoutSeconds).toBe(300);
       expect(internal.asset).toBe("native");
     });
@@ -61,7 +61,7 @@ describe("x402-ton scheme unit tests", () => {
         network: CAIP2_THANOS_SEPOLIA as Network,
         asset: "native",
         amount: "500",
-        payTo: "0xaaaa",
+        payTo: "0x0000000000000000000000000000000000000001",
         maxTimeoutSeconds: 60,
         extra: {},
       };

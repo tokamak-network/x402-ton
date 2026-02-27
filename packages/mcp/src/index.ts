@@ -140,6 +140,7 @@ server.registerTool(
     try {
       const weiAmount = parseEther(amount);
       const hash = await deposit(walletClient, weiAmount);
+      await publicClient.waitForTransactionReceipt({ hash });
 
       return {
         content: [
@@ -176,6 +177,7 @@ server.registerTool(
     try {
       const weiAmount = parseEther(amount);
       const hash = await withdraw(walletClient, weiAmount);
+      await publicClient.waitForTransactionReceipt({ hash });
 
       return {
         content: [

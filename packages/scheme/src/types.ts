@@ -9,15 +9,18 @@ import type {
   VerifyRequest,
   SettleRequest,
 } from "@x402-ton/common";
+import { getAddress } from "viem";
 
 /**
  * @x402/core uses scheme:"exact", amount, and extra bag.
  * Internal uses scheme:"exact-ton", maxAmountRequired, and inline resource/description/mimeType.
  */
 export function toInternalRequirement(coreReq: CoreRequirements): PaymentRequirement {
-  const payTo = coreReq.payTo;
-  if (!payTo.startsWith("0x")) {
-    throw new Error(`Invalid payTo address: ${payTo}`);
+  let payTo: `0x${string}`;
+  try {
+    payTo = getAddress(coreReq.payTo) as `0x${string}`;
+  } catch {
+    throw new Error(`Invalid payTo address: ${coreReq.payTo}`);
   }
 
   return {
@@ -27,7 +30,7 @@ export function toInternalRequirement(coreReq: CoreRequirements): PaymentRequire
     resource: typeof coreReq.extra?.resource === "string" ? coreReq.extra.resource : "",
     description: typeof coreReq.extra?.description === "string" ? coreReq.extra.description : "",
     mimeType: typeof coreReq.extra?.mimeType === "string" ? coreReq.extra.mimeType : "application/json",
-    payTo: payTo as `0x${string}`,
+    payTo,
     maxTimeoutSeconds: coreReq.maxTimeoutSeconds,
     asset: "native",
     extra: coreReq.extra,

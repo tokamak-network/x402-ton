@@ -22,7 +22,7 @@ export async function signPayment(
   const facilitatorAddr = config.facilitatorAddress ?? CONTRACTS.facilitator;
   const chainId = config.chainId ?? thanosSepolia.id;
 
-  const nonce = `0x${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex")}` as `0x${string}`;
+  const nonce = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("")}` as `0x${string}`;
   const deadline = String(Math.floor(Date.now() / 1000) + requirement.maxTimeoutSeconds);
 
   const domain = getFacilitatorDomain(facilitatorAddr, chainId);

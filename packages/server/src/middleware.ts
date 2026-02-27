@@ -103,6 +103,7 @@ export function paymentMiddleware(config: MiddlewareConfig) {
           paymentPayload: payload,
           paymentRequirements: requirement,
         }),
+        signal: AbortSignal.timeout(30_000),
       });
 
       if (!verifyRes.ok) {
