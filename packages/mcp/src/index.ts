@@ -7,11 +7,16 @@ import { privateKeyToAccount } from "viem/accounts";
 import { thanosSepolia, CONTRACTS } from "@x402-ton/common";
 import { createX402TonFetch, deposit, getBalance, withdraw } from "@x402-ton/client";
 
-const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
-if (!privateKey) {
+const rawKey = process.env.PRIVATE_KEY;
+if (!rawKey) {
   console.error("x402-ton-mcp: Set PRIVATE_KEY env var");
   process.exit(1);
 }
+if (!rawKey.startsWith("0x")) {
+  console.error("x402-ton-mcp: PRIVATE_KEY must start with 0x");
+  process.exit(1);
+}
+const privateKey = rawKey as `0x${string}`;
 
 const account = privateKeyToAccount(privateKey);
 const publicClient = createPublicClient({ chain: thanosSepolia, transport: http() });
@@ -91,22 +96,34 @@ server.registerTool(
     inputSchema: {},
   },
   async () => {
-    const walletBalance = await publicClient.getBalance({ address: account.address });
-    const facilitatorBalance = await getBalance(publicClient, account.address);
+    try {
+      const walletBalance = await publicClient.getBalance({ address: account.address });
+      const facilitatorBalance = await getBalance(publicClient, account.address);
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: [
-            `Address: ${account.address}`,
-            `Wallet balance: ${formatEther(walletBalance)} TON`,
-            `Facilitator deposit: ${formatEther(facilitatorBalance)} TON`,
-            `Facilitator contract: ${CONTRACTS.facilitator}`,
-          ].join("\n"),
-        },
-      ],
-    };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: [
+              `Address: ${account.address}`,
+              `Wallet balance: ${formatEther(walletBalance)} TON`,
+              `Facilitator deposit: ${formatEther(facilitatorBalance)} TON`,
+              `Facilitator contract: ${CONTRACTS.facilitator}`,
+            ].join("\n"),
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Balance check failed: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 );
 

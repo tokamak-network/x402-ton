@@ -34,9 +34,16 @@ export function createX402TonFetch(config: X402TonClientConfig) {
     const paymentRequiredHeader = response.headers.get("payment-required");
     if (!paymentRequiredHeader) return response;
 
-    const paymentRequired: PaymentRequired = JSON.parse(
-      Buffer.from(paymentRequiredHeader, "base64").toString("utf-8")
-    );
+    let paymentRequired: PaymentRequired;
+    try {
+      paymentRequired = JSON.parse(atob(paymentRequiredHeader));
+    } catch {
+      throw new Error("Invalid payment-required header: malformed base64 or JSON");
+    }
+
+    if (!Array.isArray(paymentRequired.accepts)) {
+      throw new Error("Invalid payment-required header: missing accepts array");
+    }
 
     const requirement = paymentRequired.accepts.find(
       (r) => r.scheme === "exact-ton"
@@ -53,7 +60,7 @@ export function createX402TonFetch(config: X402TonClientConfig) {
     }
 
     const payload = await signPayment(signerConfig, requirement);
-    const paymentHeader = Buffer.from(JSON.stringify(payload)).toString("base64");
+    const paymentHeader = btoa(JSON.stringify(payload));
 
     return fetch(input, {
       ...init,

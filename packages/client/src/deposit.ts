@@ -11,7 +11,7 @@ export async function getBalance(
     abi: FACILITATOR_ABI,
     functionName: "balances",
     args: [account],
-  }) as Promise<bigint>;
+  });
 }
 
 export async function deposit(
@@ -19,12 +19,13 @@ export async function deposit(
   amount: bigint,
   facilitatorAddress?: `0x${string}`
 ): Promise<`0x${string}`> {
+  if (!walletClient.account) throw new Error("WalletClient has no connected account");
   return walletClient.writeContract({
     address: facilitatorAddress ?? CONTRACTS.facilitator,
     abi: FACILITATOR_ABI,
     functionName: "deposit",
     value: amount,
-    account: walletClient.account!,
+    account: walletClient.account,
     chain: walletClient.chain,
   });
 }
@@ -34,12 +35,13 @@ export async function withdraw(
   amount: bigint,
   facilitatorAddress?: `0x${string}`
 ): Promise<`0x${string}`> {
+  if (!walletClient.account) throw new Error("WalletClient has no connected account");
   return walletClient.writeContract({
     address: facilitatorAddress ?? CONTRACTS.facilitator,
     abi: FACILITATOR_ABI,
     functionName: "withdraw",
     args: [amount],
-    account: walletClient.account!,
+    account: walletClient.account,
     chain: walletClient.chain,
   });
 }
@@ -50,13 +52,16 @@ export async function ensureBalance(
   requiredAmount: bigint,
   facilitatorAddress?: `0x${string}`
 ): Promise<`0x${string}` | null> {
+  if (!walletClient.account) throw new Error("WalletClient has no connected account");
   const current = await getBalance(
     publicClient,
-    walletClient.account!.address,
+    walletClient.account.address,
     facilitatorAddress
   );
   if (current >= requiredAmount) return null;
 
   const deficit = requiredAmount - current;
-  return deposit(walletClient, deficit, facilitatorAddress);
+  const hash = await deposit(walletClient, deficit, facilitatorAddress);
+  await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
 }

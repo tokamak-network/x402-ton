@@ -17,7 +17,7 @@ export async function verifyPayment(
     return { isValid: false, invalidReason: "Wrong recipient" };
   }
 
-  const [valid, reason] = (await publicClient.readContract({
+  const result = await publicClient.readContract({
     address: facilitatorAddress,
     abi: FACILITATOR_ABI,
     functionName: "verify",
@@ -29,7 +29,11 @@ export async function verifyPayment(
       authorization.nonce,
       signature,
     ],
-  })) as [boolean, string];
+  });
+  if (!Array.isArray(result) || result.length < 2 || typeof result[0] !== "boolean" || typeof result[1] !== "string") {
+    throw new Error("Unexpected return type from verify");
+  }
+  const [valid, reason] = result as [boolean, string];
 
   return {
     isValid: valid,

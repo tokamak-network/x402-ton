@@ -1,7 +1,7 @@
 import express from "express";
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { thanosSepolia } from "@x402-ton/common";
+import { thanosSepolia, CAIP2_THANOS_SEPOLIA } from "@x402-ton/common";
 import { verifyPayment } from "./verify.js";
 import { settlePayment } from "./settle.js";
 import { settleGasless } from "./gasless.js";
@@ -40,7 +40,7 @@ export function createFacilitatorServer(config: FacilitatorServerConfig) {
       res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Internal error";
-      res.status(500).json({ success: false, network: "eip155:111551119090", errorReason: message });
+      res.status(500).json({ success: false, network: CAIP2_THANOS_SEPOLIA, errorReason: message });
     }
   });
 
@@ -50,7 +50,7 @@ export function createFacilitatorServer(config: FacilitatorServerConfig) {
       res.json(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Internal error";
-      res.status(500).json({ success: false, network: "eip155:111551119090", errorReason: message });
+      res.status(500).json({ success: false, network: CAIP2_THANOS_SEPOLIA, errorReason: message });
     }
   });
 

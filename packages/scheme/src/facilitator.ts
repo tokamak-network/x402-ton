@@ -79,7 +79,8 @@ export class ExactTonFacilitator implements SchemeNetworkFacilitator {
     return {
       success: result.success,
       payer: result.payer,
-      transaction: result.transaction ?? "",
+      // "0x" sentinel: settlement failed or returned no tx hash
+      transaction: result.transaction ?? "0x",
       network: (result.network ?? CAIP2_THANOS_SEPOLIA) as Network,
       errorReason: result.errorReason,
     };

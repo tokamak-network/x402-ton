@@ -1,1 +1,1 @@
-export { paymentMiddleware, type RouteConfig, type MiddlewareConfig } from "./middleware.js";
+export { paymentMiddleware, matchRoute, type RouteConfig, type MiddlewareConfig } from "./middleware.js";

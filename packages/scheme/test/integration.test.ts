@@ -18,9 +18,131 @@ import type { PaymentPayload } from "@x402-ton/common";
 
 const TEST_PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}` | undefined;
 
-const describeWithKey = TEST_PRIVATE_KEY ? describe : describe.skip;
+// Pure unit tests — always run, no env vars needed
+describe("x402-ton scheme unit tests", () => {
+  describe("toInternalRequirement", () => {
+    it("maps core PaymentRequirements to internal format", () => {
+      // #given
+      const coreRequirements: PaymentRequirements = {
+        scheme: "exact",
+        network: CAIP2_THANOS_SEPOLIA as Network,
+        asset: "native",
+        amount: "1000000000000000000",
+        payTo: "0x1234567890abcdef1234567890abcdef12345678",
+        maxTimeoutSeconds: 300,
+        extra: {
+          resource: "https://example.com/api/data",
+          description: "Test resource",
+          mimeType: "application/json",
+          facilitatorAddress:
+            "0x0af530d6d66947aD930a7d1De60E58c43D40a308",
+        },
+      };
 
-describeWithKey("x402-ton scheme integration", () => {
+      // #when
+      const internal = toInternalRequirement(coreRequirements);
+
+      // #then
+      expect(internal.scheme).toBe("exact-ton");
+      expect(internal.network).toBe(coreRequirements.network);
+      expect(internal.maxAmountRequired).toBe(coreRequirements.amount);
+      expect(internal.resource).toBe("https://example.com/api/data");
+      expect(internal.description).toBe("Test resource");
+      expect(internal.mimeType).toBe("application/json");
+      expect(internal.payTo).toBe(coreRequirements.payTo);
+      expect(internal.maxTimeoutSeconds).toBe(300);
+      expect(internal.asset).toBe("native");
+    });
+
+    it("defaults missing extra fields to empty strings", () => {
+      // #given
+      const sparseReq: PaymentRequirements = {
+        scheme: "exact",
+        network: CAIP2_THANOS_SEPOLIA as Network,
+        asset: "native",
+        amount: "500",
+        payTo: "0xaaaa",
+        maxTimeoutSeconds: 60,
+        extra: {},
+      };
+
+      // #when
+      const sparseInternal = toInternalRequirement(sparseReq);
+
+      // #then
+      expect(sparseInternal.resource).toBe("");
+      expect(sparseInternal.description).toBe("");
+      expect(sparseInternal.mimeType).toBe("application/json");
+    });
+  });
+
+  describe("toPayloadResult", () => {
+    it("round-trips payload fields", () => {
+      // #given
+      const testPayload: PaymentPayload = {
+        x402Version: 2,
+        scheme: "exact-ton",
+        network: CAIP2_THANOS_SEPOLIA,
+        payload: {
+          signature:
+            "0xdeadbeef" as `0x${string}`,
+          authorization: {
+            from: "0xaaaa" as `0x${string}`,
+            to: "0xbbbb" as `0x${string}`,
+            amount: "1000",
+            deadline: "9999999999",
+            nonce:
+              "0x0000000000000000000000000000000000000000000000000000000000000001" as `0x${string}`,
+          },
+        },
+      };
+
+      // #when
+      const payloadResult = toPayloadResult(testPayload);
+
+      // #then
+      expect(payloadResult.signature).toBe(testPayload.payload.signature);
+      expect(payloadResult.authorization).toEqual(
+        testPayload.payload.authorization,
+      );
+      expect(typeof payloadResult).toBe("object");
+      expect(payloadResult).not.toBeNull();
+    });
+  });
+
+  describe("ExactTonServer.parsePrice", () => {
+    const tonServer = new ExactTonServer();
+    const network = CAIP2_THANOS_SEPOLIA as Network;
+
+    it("converts number to wei", async () => {
+      const result = await tonServer.parsePrice(1.5, network);
+      expect(result.asset).toBe("native");
+      expect(result.amount).toBe("1500000000000000000");
+    });
+
+    it("converts string to wei", async () => {
+      const result = await tonServer.parsePrice("2.0", network);
+      expect(result.amount).toBe("2000000000000000000");
+    });
+
+    it("passes through AssetAmount directly", async () => {
+      const result = await tonServer.parsePrice(
+        { asset: "native", amount: "42" },
+        network,
+      );
+      expect(result.amount).toBe("42");
+      expect(result.asset).toBe("native");
+    });
+
+    it("strips dollar sign prefix", async () => {
+      const result = await tonServer.parsePrice("$3.0", network);
+      expect(result.amount).toBe("3000000000000000000");
+    });
+  });
+});
+
+// Integration tests requiring a private key — skipped in CI
+describe.skipIf(!TEST_PRIVATE_KEY)("x402-ton scheme integration (requires PRIVATE_KEY)", () => {
   let account: ReturnType<typeof privateKeyToAccount>;
   let publicClient: ReturnType<typeof createPublicClient>;
   let walletClient: ReturnType<typeof createWalletClient>;
@@ -69,117 +191,6 @@ describeWithKey("x402-ton scheme integration", () => {
         "exact",
       );
       expect(hasScheme).toBe(true);
-    });
-  });
-
-  describe("toInternalRequirement", () => {
-    it("maps core PaymentRequirements to internal format", () => {
-      const coreRequirements: PaymentRequirements = {
-        scheme: "exact",
-        network: CAIP2_THANOS_SEPOLIA as Network,
-        asset: "native",
-        amount: "1000000000000000000",
-        payTo: "0x1234567890abcdef1234567890abcdef12345678",
-        maxTimeoutSeconds: 300,
-        extra: {
-          resource: "https://example.com/api/data",
-          description: "Test resource",
-          mimeType: "application/json",
-          facilitatorAddress:
-            "0x0af530d6d66947aD930a7d1De60E58c43D40a308",
-        },
-      };
-
-      const internal = toInternalRequirement(coreRequirements);
-
-      expect(internal.scheme).toBe("exact-ton");
-      expect(internal.network).toBe(coreRequirements.network);
-      expect(internal.maxAmountRequired).toBe(coreRequirements.amount);
-      expect(internal.resource).toBe("https://example.com/api/data");
-      expect(internal.description).toBe("Test resource");
-      expect(internal.mimeType).toBe("application/json");
-      expect(internal.payTo).toBe(coreRequirements.payTo);
-      expect(internal.maxTimeoutSeconds).toBe(300);
-      expect(internal.asset).toBe("native");
-    });
-
-    it("defaults missing extra fields to empty strings", () => {
-      const sparseReq: PaymentRequirements = {
-        scheme: "exact",
-        network: CAIP2_THANOS_SEPOLIA as Network,
-        asset: "native",
-        amount: "500",
-        payTo: "0xaaaa",
-        maxTimeoutSeconds: 60,
-        extra: {},
-      };
-
-      const sparseInternal = toInternalRequirement(sparseReq);
-
-      expect(sparseInternal.resource).toBe("");
-      expect(sparseInternal.description).toBe("");
-      expect(sparseInternal.mimeType).toBe("application/json");
-    });
-  });
-
-  describe("toPayloadResult", () => {
-    it("round-trips payload fields", () => {
-      const testPayload: PaymentPayload = {
-        x402Version: 2,
-        scheme: "exact-ton",
-        network: CAIP2_THANOS_SEPOLIA,
-        payload: {
-          signature:
-            "0xdeadbeef" as `0x${string}`,
-          authorization: {
-            from: "0xaaaa" as `0x${string}`,
-            to: "0xbbbb" as `0x${string}`,
-            amount: "1000",
-            deadline: "9999999999",
-            nonce:
-              "0x0000000000000000000000000000000000000000000000000000000000000001" as `0x${string}`,
-          },
-        },
-      };
-
-      const payloadResult = toPayloadResult(testPayload);
-
-      expect(payloadResult.signature).toBe(testPayload.payload.signature);
-      expect(payloadResult.authorization).toEqual(
-        testPayload.payload.authorization,
-      );
-      expect(typeof payloadResult).toBe("object");
-      expect(payloadResult).not.toBeNull();
-    });
-  });
-
-  describe("ExactTonServer.parsePrice", () => {
-    const tonServer = new ExactTonServer();
-    const network = CAIP2_THANOS_SEPOLIA as Network;
-
-    it("converts number to wei", async () => {
-      const result = await tonServer.parsePrice(1.5, network);
-      expect(result.asset).toBe("native");
-      expect(result.amount).toBe("1500000000000000000");
-    });
-
-    it("converts string to wei", async () => {
-      const result = await tonServer.parsePrice("2.0", network);
-      expect(result.amount).toBe("2000000000000000000");
-    });
-
-    it("passes through AssetAmount directly", async () => {
-      const result = await tonServer.parsePrice(
-        { asset: "native", amount: "42" },
-        network,
-      );
-      expect(result.amount).toBe("42");
-      expect(result.asset).toBe("native");
-    });
-
-    it("strips dollar sign prefix", async () => {
-      const result = await tonServer.parsePrice("$3.0", network);
-      expect(result.amount).toBe("3000000000000000000");
     });
   });
 

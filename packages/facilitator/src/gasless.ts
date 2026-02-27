@@ -39,6 +39,8 @@ interface UserOp {
 
 const PAYMASTER_MIN_DEPOSIT = parseEther("0.1");
 const PAYMASTER_TOP_UP_AMOUNT = parseEther("1.0");
+// Module-level singleton: throttles paymaster balance checks across all settleGasless
+// calls in this process. Safe because the facilitator runs as a single-instance server.
 let lastTopUpCheck = 0;
 const TOP_UP_CHECK_INTERVAL_MS = 60_000;
 
@@ -124,7 +126,8 @@ async function topUpPaymasterIfNeeded(
       abi: ENTRY_POINT_ABI,
       functionName: "balanceOf",
       args: [CONTRACTS.paymaster],
-    }) as bigint;
+    });
+    if (typeof deposit !== "bigint") throw new Error("Unexpected return type from balanceOf");
 
     if (deposit >= PAYMASTER_MIN_DEPOSIT) return;
 
@@ -166,7 +169,10 @@ export async function settleGasless(
       abi: STEALTH_ACCOUNT_FACTORY_ABI,
       functionName: "getAddress",
       args: [owner, 0n],
-    }) as `0x${string}`;
+    });
+    if (typeof senderAddress !== "string" || !senderAddress.startsWith("0x")) {
+      throw new Error("Unexpected return type from getAddress");
+    }
 
     // Deploy AA account on first use via initCode
     const code = await publicClient.getCode({ address: senderAddress });
@@ -182,7 +188,8 @@ export async function settleGasless(
       abi: ENTRY_POINT_ABI,
       functionName: "getNonce",
       args: [senderAddress, 0n],
-    }) as bigint;
+    });
+    if (typeof nonce !== "bigint") throw new Error("Unexpected return type from getNonce");
 
     const callGasLimit = 300_000n;
     const verificationGasLimit = needsDeploy ? 500_000n : 200_000n;
@@ -228,7 +235,10 @@ export async function settleGasless(
       abi: ENTRY_POINT_ABI,
       functionName: "getUserOpHash",
       args: [userOp],
-    }) as `0x${string}`;
+    });
+    if (typeof userOpHash !== "string" || !userOpHash.startsWith("0x")) {
+      throw new Error("Unexpected return type from getUserOpHash");
+    }
 
     userOp.signature = await walletClient.signMessage({
       message: { raw: userOpHash },

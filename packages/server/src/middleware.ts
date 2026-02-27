@@ -29,16 +29,21 @@ export interface MiddlewareConfig {
   gasless?: boolean;
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // Matches "METHOD /path" against route patterns with [param] bracket syntax
-function matchRoute(
+export function matchRoute(
   method: string,
   path: string,
   routes: Record<string, RouteConfig>
 ): RouteConfig | null {
   const key = `${method.toUpperCase()} ${path}`;
   for (const [pattern, config] of Object.entries(routes)) {
+    const escaped = escapeRegex(pattern);
     const regex = new RegExp(
-      "^" + pattern.replace(/\[(\w+)\]/g, "[^/]+") + "$"
+      "^" + escaped.replace(/\\\[(\w+)\\\]/g, "[^/]+") + "$"
     );
     if (regex.test(key)) return config;
   }
@@ -47,26 +52,28 @@ function matchRoute(
 
 export function paymentMiddleware(config: MiddlewareConfig) {
   const network = config.network ?? CAIP2_THANOS_SEPOLIA;
+  const facilitatorUrl = config.facilitatorUrl.replace(/\/+$/, "");
 
   return async (req: Request, res: Response, next: NextFunction) => {
     const route = matchRoute(req.method, req.path, config.routes);
     if (!route) return next();
 
-    const paymentHeader = req.headers["payment-signature"] as string | undefined;
+    const requirement: PaymentRequirement = {
+      scheme: "exact-ton",
+      network,
+      maxAmountRequired: route.price,
+      resource: req.originalUrl,
+      description: route.description ?? "",
+      mimeType: route.mimeType ?? "application/json",
+      payTo: route.payTo,
+      maxTimeoutSeconds: route.maxTimeoutSeconds ?? 60,
+      asset: "native",
+    };
+
+    const raw = req.headers["payment-signature"];
+    const paymentHeader = Array.isArray(raw) ? raw[0] : raw;
 
     if (!paymentHeader) {
-      const requirement: PaymentRequirement = {
-        scheme: "exact-ton",
-        network,
-        maxAmountRequired: route.price,
-        resource: req.originalUrl,
-        description: route.description ?? "",
-        mimeType: route.mimeType ?? "application/json",
-        payTo: route.payTo,
-        maxTimeoutSeconds: route.maxTimeoutSeconds ?? 60,
-        asset: "native",
-      };
-
       const paymentRequired: PaymentRequired = {
         version: 2,
         accepts: [requirement],
@@ -89,20 +96,18 @@ export function paymentMiddleware(config: MiddlewareConfig) {
     }
 
     try {
-      const verifyRes = await fetch(`${config.facilitatorUrl}/verify`, {
+      const verifyRes = await fetch(`${facilitatorUrl}/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentPayload: payload,
-          paymentRequirements: {
-            scheme: "exact-ton",
-            network,
-            maxAmountRequired: route.price,
-            payTo: route.payTo,
-            asset: "native",
-          },
+          paymentRequirements: requirement,
         }),
       });
+
+      if (!verifyRes.ok) {
+        throw new Error(`Facilitator returned ${verifyRes.status} ${verifyRes.statusText}`);
+      }
 
       const verify: VerifyResponse = await verifyRes.json();
       if (!verify.isValid) {
@@ -119,31 +124,22 @@ export function paymentMiddleware(config: MiddlewareConfig) {
       return;
     }
 
-    // Store payment context for post-handler settlement
-    const paymentContext = {
-      payload,
-      requirements: {
-        scheme: "exact-ton" as const,
-        network,
-        maxAmountRequired: route.price,
-        payTo: route.payTo,
-        asset: "native" as const,
-      },
-    };
-
     // Intercept res.json to settle BEFORE sending response
     const originalJson = res.json.bind(res);
     res.json = function (body: unknown) {
       (async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30_000);
         try {
           const settleEndpoint = config.gasless ? "/settle-gasless" : "/settle";
-          const settleRes = await fetch(`${config.facilitatorUrl}${settleEndpoint}`, {
+          const settleRes = await fetch(`${facilitatorUrl}${settleEndpoint}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              paymentPayload: paymentContext.payload,
-              paymentRequirements: paymentContext.requirements,
+              paymentPayload: payload,
+              paymentRequirements: requirement,
             }),
+            signal: controller.signal,
           });
           const settlement: SettlementResponse = await settleRes.json();
           if (settlement.success && settlement.transaction) {
@@ -153,8 +149,9 @@ export function paymentMiddleware(config: MiddlewareConfig) {
             );
           }
         } catch (err) {
-          // Settlement failure should not block the response — but log it
           console.warn("[x402-ton] settlement failed:", err instanceof Error ? err.message : err);
+        } finally {
+          clearTimeout(timeoutId);
         }
         originalJson(body);
       })();

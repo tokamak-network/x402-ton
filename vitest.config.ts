@@ -6,8 +6,10 @@ export default defineConfig({
     testTimeout: 30000,
     exclude: [
       "contracts/**",
+      "**/contracts/**",
       "examples/**",
       "node_modules/**",
+      "**/node_modules/**",
     ],
   },
 });
