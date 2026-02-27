@@ -30,7 +30,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@x402-ton/common": "*"
+    "@x402-ton/common": "^0.1.0"
   },
   "peerDependencies": {
     "viem": ">=2.0.0"

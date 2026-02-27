@@ -10,7 +10,8 @@ x402 payment protocol implementation for Tokamak Network's Thanos L2 chain (nati
 @x402-ton/server         Express middleware — returns 402, verifies, settles
 @x402-ton/facilitator    Verify + settle payments on-chain, HTTP server
 @x402-ton/scheme         Plugin adapters for @x402/core framework
-@x402-ton/cli            CLI: balance, deposit, pay
+@x402-ton/mcp            MCP server — lets AI agents pay for APIs
+@x402-ton/cli            CLI: balance, deposit, withdraw, pay
 
 contracts/               TonPaymentFacilitator.sol (Foundry)
 ```
@@ -124,9 +125,37 @@ PRIVATE_KEY=0x... x402-ton balance
 # Deposit TON into facilitator
 PRIVATE_KEY=0x... x402-ton deposit 1.0
 
+# Withdraw TON from facilitator
+PRIVATE_KEY=0x... x402-ton withdraw 0.5
+
 # Pay for an API endpoint
 PRIVATE_KEY=0x... x402-ton pay http://localhost:3000/api/weather
 ```
+
+## MCP server (AI agents)
+
+`@x402-ton/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI agents (Claude, etc.) pay for APIs automatically.
+
+```bash
+npm install -g @x402-ton/mcp
+```
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "x402-ton": {
+      "command": "x402-ton-mcp",
+      "env": {
+        "PRIVATE_KEY": "0xYourPrivateKey"
+      }
+    }
+  }
+}
+```
+
+Tools exposed: `pay_for_api`, `check_balance`, `deposit_ton`, `withdraw_ton`.
 
 ## Contract deployment
 
@@ -166,6 +195,7 @@ npm run typecheck   # Type-check all packages
 - [`@x402-ton/server`](packages/server/README.md) -- Express payment middleware
 - [`@x402-ton/facilitator`](packages/facilitator/README.md) -- On-chain verification and settlement
 - [`@x402-ton/scheme`](packages/scheme/README.md) -- @x402/core plugin adapters
+- [`@x402-ton/mcp`](packages/mcp/README.md) -- MCP server for AI agents
 - [`@x402-ton/cli`](packages/cli/README.md) -- CLI tool
 
 ## License

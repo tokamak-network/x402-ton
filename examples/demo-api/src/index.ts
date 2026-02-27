@@ -55,7 +55,7 @@ app.get("/api/free", (_req, res) => {
 });
 
 app.get("/api/weather", (req, res) => {
-  res.json({ location: "Thanos Sepolia", temperature: "42°C", condition: "Powered by TON", payer: (req as any).x402Payer });
+  res.json({ location: "Thanos Sepolia", temperature: "42°C", condition: "Powered by TON", payer: req.x402Payer });
 });
 
 app.get("/api/joke", (_req, res) => {
@@ -68,7 +68,7 @@ app.get("/api/joke", (_req, res) => {
 });
 
 app.get("/api/premium/:id", (req, res) => {
-  res.json({ id: req.params.id, content: "Premium content unlocked via x402 TON payment", payer: (req as any).x402Payer });
+  res.json({ id: req.params.id, content: "Premium content unlocked via x402 TON payment", payer: req.x402Payer });
 });
 
 app.listen(port, () => {

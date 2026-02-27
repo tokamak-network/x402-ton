@@ -32,7 +32,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@x402-ton/common": "*"
+    "@x402-ton/common": "^0.1.0"
   },
   "peerDependencies": {
     "express": ">=4.0.0",

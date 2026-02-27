@@ -33,8 +33,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@x402-ton/client": "*",
-    "@x402-ton/common": "*",
+    "@x402-ton/client": "^0.1.0",
+    "@x402-ton/common": "^0.1.0",
     "viem": "^2.30.0"
   }
 }

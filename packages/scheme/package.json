@@ -31,9 +31,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@x402-ton/common": "*",
-    "@x402-ton/client": "*",
-    "@x402-ton/facilitator": "*"
+    "@x402-ton/common": "^0.1.0",
+    "@x402-ton/client": "^0.1.0",
+    "@x402-ton/facilitator": "^0.1.0"
   },
   "peerDependencies": {
     "@x402/core": ">=2.5.0",
