@@ -1,8 +1,8 @@
 # x402-TON Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **SUPERSEDED**: This plan was replaced by the USDC/EIP-3009 migration. See [2026-02-27-x402-usdc-migration-design.md](./2026-02-27-x402-usdc-migration-design.md) for the current design.
 
-**Goal:** Build a production-ready x402 payment platform using native TON on Thanos Sepolia with a pre-deposit facilitator contract, self-hosted facilitator service, server middleware, client SDK, CLI tool, and ERC-4337 gasless support.
+**Goal:** ~~Build a production-ready x402 payment platform using native TON on Thanos Sepolia with a pre-deposit facilitator contract, self-hosted facilitator service, server middleware, client SDK, CLI tool, and ERC-4337 gasless support.~~ *Superseded — now uses USDC with EIP-3009 transferWithAuthorization.*
 
 **Architecture:** Pre-deposit model — clients deposit native TON into a `TonPaymentFacilitator` contract and sign EIP-712 messages authorizing payments. A self-hosted facilitator service verifies signatures (via on-chain `verify()` view call) and settles payments (calls `settle()` which deducts balance and forwards TON to `payTo`). Express middleware returns 402 with TON payment requirements; client SDK intercepts 402, signs authorization, retries. ERC-4337 gasless mode uses Dust Protocol's existing EntryPoint + DustPaymaster for users without gas.
 
