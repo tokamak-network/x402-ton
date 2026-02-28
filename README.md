@@ -1,202 +1,297 @@
 # x402-ton
 
-x402 payment protocol implementation for Tokamak Network's Thanos L2 chain (native TON token).
-
-## Architecture
-
-```
-@x402-ton/common         Types, chain config, EIP-712 domain, contract ABI
-@x402-ton/client         Sign payments, deposit/withdraw, fetch wrapper
-@x402-ton/server         Express middleware — returns 402, verifies, settles
-@x402-ton/facilitator    Verify + settle payments on-chain, HTTP server
-@x402-ton/scheme         Plugin adapters for @x402/core framework
-@x402-ton/mcp            MCP server — lets AI agents pay for APIs
-@x402-ton/cli            CLI: balance, deposit, withdraw, pay
-
-contracts/               TonPaymentFacilitator.sol (Foundry)
-```
-
-**Chain**: Thanos Sepolia (chain ID `111551119090`, CAIP-2: `eip155:111551119090`)
-**Facilitator contract**: `0x0af530d6d66947aD930a7d1De60E58c43D40a308`
+x402 payment protocol implementation for [Tokamak Network](https://tokamak.network)'s Thanos L2 chain. Pay for APIs with USDC using EIP-3009 `transferWithAuthorization` — no deposits, no custom contracts, no gas from the payer.
 
 ## How it works
 
-Payers deposit TON into the facilitator contract. When accessing a paid API, the client signs an EIP-712 `PaymentAuth` message authorizing transfer from their deposit to the API operator. The facilitator verifies the signature on-chain and settles by moving funds.
+When a client requests a paid API endpoint, the server returns HTTP 402 with payment requirements. The client signs an EIP-3009 `TransferWithAuthorization` message off-chain, then retries the request with the signed payment. The facilitator verifies the signature and calls `transferWithAuthorization` on USDC to move funds directly from payer to recipient.
 
 ```
 Client                    Server                   Facilitator
   |--- GET /api/data ------->|                          |
   |<-- 402 + payment-required|                          |
   |                          |                          |
-  |  (sign EIP-712 auth)     |                          |
+  |  (sign EIP-3009 auth)    |                          |
   |                          |                          |
   |--- GET + payment-sig --->|--- POST /verify -------->|
   |                          |<-- { isValid: true } ----|
+  |                          |                          |
+  |                          |   (run handler)          |
+  |                          |                          |
   |                          |--- POST /settle -------->|
   |                          |<-- { tx: 0x... } --------|
   |<-- 200 + payment-response|                          |
 ```
 
-## Quick start: Protect an API (server)
+**Chain**: Thanos Sepolia (chain ID `111551119090`, CAIP-2: `eip155:111551119090`)
+**Token**: USDC at `0x4200000000000000000000000000000000000778` (FiatTokenV2_2, 6 decimals)
+**Settlement**: Direct `transferWithAuthorization` on USDC — payer's funds move directly to the payTo address
 
-```ts
-import express from "express";
-import { parseEther } from "viem";
-import { paymentMiddleware } from "@x402-ton/server";
+## Installation
 
-const app = express();
+```bash
+# Server packages (sell APIs)
+npm install @x402-ton/facilitator @x402-ton/scheme @x402/express @x402/core
 
-app.use(
-  paymentMiddleware({
-    facilitatorUrl: "http://localhost:4402",
-    routes: {
-      "GET /api/weather": {
-        price: parseEther("0.001").toString(),
-        payTo: "0xYourAddress",
-        description: "Weather data (0.001 TON)",
-      },
-    },
-  })
-);
-
-app.get("/api/weather", (req, res) => {
-  res.json({ temp: "42C", payer: req.x402Payer });
-});
-
-app.listen(3000);
+# Client packages (buy APIs)
+npm install @x402-ton/scheme @x402/fetch @x402/core viem
 ```
 
-## Quick start: Pay for an API (client)
+## Quick start: Sell an API (server)
 
-```ts
-import { createPublicClient, createWalletClient, http } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { thanosSepolia } from "@x402-ton/common";
-import { createX402TonFetch } from "@x402-ton/client";
+Uses `@x402/express` middleware with the Thanos Sepolia scheme registered. The self-hosted facilitator handles on-chain verification and settlement since CDP doesn't support Thanos yet.
 
-const account = privateKeyToAccount("0xYourPrivateKey");
-const publicClient = createPublicClient({ chain: thanosSepolia, transport: http() });
-const walletClient = createWalletClient({ account, chain: thanosSepolia, transport: http() });
+```typescript
+import express from "express";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import { HTTPFacilitatorClient } from "@x402/core/server";
+import { registerExactTonServer } from "@x402-ton/scheme";
+import { createFacilitatorServer } from "@x402-ton/facilitator";
 
-const x402Fetch = createX402TonFetch({
-  account,
-  publicClient,
-  walletClient,
-  autoDeposit: true,
+// Self-hosted facilitator
+createFacilitatorServer({ privateKey: "0x..." }).listen(4402);
+
+const facilitatorClient = new HTTPFacilitatorClient({ url: "http://localhost:4402" });
+const server = new x402ResourceServer(facilitatorClient);
+registerExactTonServer(server);
+
+const app = express();
+app.use(paymentMiddleware({
+  "GET /api/plasma": {
+    accepts: [{
+      scheme: "exact",
+      price: "$0.10",
+      network: "eip155:111551119090",
+      payTo: "0xYourAddress",
+    }],
+    description: "Plasma channel state",
+  },
+}, server));
+
+app.get("/api/plasma", (_req, res) => {
+  res.json({ epoch: 42, throughput: "1800 tx/s" });
 });
 
-const res = await x402Fetch("http://localhost:3000/api/weather");
+app.listen(4403);
+```
+
+## Quick start: Buy an API (client)
+
+Uses `@x402/fetch` — wraps native `fetch` to automatically handle 402 responses.
+
+```typescript
+import { x402Client } from "@x402/core/client";
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { registerExactTonScheme } from "@x402-ton/scheme";
+import { privateKeyToAccount } from "viem/accounts";
+
+const client = new x402Client();
+registerExactTonScheme(client, { account: privateKeyToAccount("0x...") });
+
+const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+const res = await fetchWithPayment("http://localhost:4403/api/plasma");
 console.log(await res.json());
 ```
 
-## Quick start: @x402/core plugin
+## Standalone usage (no @x402/core)
 
-Use `@x402-ton/scheme` to plug TON payments into the `@x402/core` framework alongside other chains.
+For Thanos-only integrations without the multi-chain framework:
 
-```ts
-import { x402Client } from "@x402/core/client";
-import { x402Facilitator } from "@x402/core/facilitator";
-import { x402ResourceServer } from "@x402/core/server";
-import {
-  registerExactTonScheme,
-  registerExactTonFacilitator,
-  registerExactTonServer,
-} from "@x402-ton/scheme";
+### Server
 
-const client = new x402Client();
-registerExactTonScheme(client, { account });
+```typescript
+import express from "express";
+import { paymentMiddleware } from "@x402-ton/server";
 
-const facilitator = new x402Facilitator();
-registerExactTonFacilitator(facilitator, { publicClient, walletClient });
+const app = express();
+app.use(paymentMiddleware({
+  facilitatorUrl: "http://localhost:4402",
+  routes: {
+    "GET /api/plasma": {
+      price: "100000", // $0.10 USDC (6 decimals)
+      payTo: "0xYourAddress",
+    },
+  },
+}));
 
-const server = new x402ResourceServer(facilitatorClient);
-registerExactTonServer(server);
+app.get("/api/plasma", (req, res) => {
+  res.json({ payer: req.x402Payer, data: "..." });
+});
+app.listen(4403);
+```
+
+### Client
+
+```typescript
+import { createX402Fetch } from "@x402-ton/client";
+import { privateKeyToAccount } from "viem/accounts";
+
+const x402Fetch = createX402Fetch({ account: privateKeyToAccount("0x...") });
+const res = await x402Fetch("http://localhost:4403/api/plasma");
 ```
 
 ## CLI
 
 ```bash
-# Install
 npm install -g @x402-ton/cli
 
 # Check balances
 PRIVATE_KEY=0x... x402-ton balance
 
-# Deposit TON into facilitator
-PRIVATE_KEY=0x... x402-ton deposit 1.0
-
-# Withdraw TON from facilitator
-PRIVATE_KEY=0x... x402-ton withdraw 0.5
-
 # Pay for an API endpoint
-PRIVATE_KEY=0x... x402-ton pay http://localhost:3000/api/weather
+PRIVATE_KEY=0x... x402-ton pay http://localhost:4403/api/plasma
 ```
 
 ## MCP server (AI agents)
 
-`@x402-ton/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that lets AI agents (Claude, etc.) pay for APIs automatically.
-
-```bash
-npm install -g @x402-ton/mcp
-```
-
-Add to your Claude Desktop config (`claude_desktop_config.json`):
+x402-ton includes an MCP server that lets AI agents pay for APIs autonomously.
 
 ```json
 {
   "mcpServers": {
     "x402-ton": {
-      "command": "x402-ton-mcp",
-      "env": {
-        "PRIVATE_KEY": "0xYourPrivateKey"
-      }
+      "command": "npx",
+      "args": ["@x402-ton/mcp"],
+      "env": { "PRIVATE_KEY": "0x..." }
     }
   }
 }
 ```
 
-Tools exposed: `pay_for_api`, `check_balance`, `deposit_ton`, `withdraw_ton`.
+Tools: `pay_for_api` (fetch URLs with automatic x402 payment), `check_balance` (USDC + native balance).
 
-## Contract deployment
+## HTTP headers
+
+| Header | Direction | Description |
+|--------|-----------|-------------|
+| `PAYMENT-REQUIRED` | Server → Client | Base64-encoded payment requirements (on 402 response) |
+| `PAYMENT-SIGNATURE` | Client → Server | Base64-encoded signed payment payload |
+| `PAYMENT-RESPONSE` | Server → Client | Base64-encoded settlement result (on 200 response) |
+
+## Types
+
+```typescript
+type Network = `${string}:${string}`; // "eip155:111551119090"
+
+interface PaymentRequirements {
+  scheme: "exact";
+  network: Network;
+  asset: `0x${string}`;
+  amount: string;           // USDC amount in smallest units (6 decimals)
+  payTo: `0x${string}`;
+  maxTimeoutSeconds: number;
+  extra: Record<string, unknown>;
+}
+
+interface TransferAuthorization {
+  from: `0x${string}`;
+  to: `0x${string}`;
+  value: string;
+  validAfter: string;
+  validBefore: string;
+  nonce: `0x${string}`;
+}
+
+interface PaymentPayload {
+  x402Version: number;
+  scheme: "exact";
+  network: Network;
+  payload: {
+    signature: `0x${string}`;
+    authorization: TransferAuthorization;
+  };
+}
+```
+
+## Testnet setup
+
+The examples require USDC on Thanos Sepolia. This script automates bridging USDC from Sepolia L1 to Thanos L2:
 
 ```bash
-cd contracts
-forge install
-forge build
-forge test
-
-# Deploy to Thanos Sepolia
-PRIVATE_KEY=0x... forge script script/Deploy.s.sol \
-  --rpc-url https://rpc.thanos-sepolia.tokamak.network \
-  --broadcast
+PRIVATE_KEY=0x... npm run fund-testnet
 ```
+
+It checks your L2 balance, and if needed, bridges your L1 Sepolia USDC through the OP Stack bridge. If you have no L1 USDC, it will direct you to the [Circle faucet](https://faucet.circle.com/).
+
+## Examples
+
+### Server (sell APIs)
+
+```bash
+cd examples/servers/express
+cp .env.example .env   # add your keys
+npm start              # starts facilitator (:4402) + API (:4403)
+```
+
+Endpoints: `GET /api/plasma` ($0.10), `GET /api/fusion` ($0.001), `GET /api/health` (free).
+
+### Client (buy APIs)
+
+```bash
+cd examples/clients/fetch
+cp .env.example .env   # add payer private key
+npm start              # hits paid endpoints with automatic x402 payment
+```
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [`@x402-ton/common`](packages/common/README.md) | Types, chain config, EIP-3009 constants, USDC ABI |
+| [`@x402-ton/client`](packages/client/README.md) | EIP-3009 signing and fetch wrapper |
+| [`@x402-ton/server`](packages/server/README.md) | Express payment middleware (standalone) |
+| [`@x402-ton/facilitator`](packages/facilitator/README.md) | On-chain verification and settlement server |
+| [`@x402-ton/scheme`](packages/scheme/README.md) | Plugin adapters for `@x402/core` multi-chain framework |
+| [`@x402-ton/cli`](packages/cli/README.md) | CLI: check balances, pay for endpoints |
+| [`@x402-ton/mcp`](packages/mcp/README.md) | MCP server for AI agent payments |
+
+## Architecture
+
+```
+@x402-ton/common         Shared types, chain config, EIP-3009 constants, USDC ABI
+@x402-ton/client         Sign EIP-3009 authorizations, fetch wrapper
+@x402-ton/server         Express middleware — returns 402, verifies, settles
+@x402-ton/facilitator    Verify + settle USDC payments on-chain, HTTP server
+@x402-ton/scheme         Plugin adapters for @x402/core framework
+@x402-ton/cli            CLI: balance, pay
+@x402-ton/mcp            MCP server for AI agent payments
+```
+
+### When to use scheme vs standalone
+
+| Scenario | Use |
+|----------|-----|
+| Thanos-only integration | `@x402-ton/client` + `@x402-ton/server` + `@x402-ton/facilitator` |
+| Multi-chain with @x402/core | `@x402-ton/scheme` + `@x402/express` + `@x402/fetch` |
+| AI agent payments | `@x402-ton/mcp` |
+| Quick testing | `@x402-ton/cli` |
 
 ## Development
 
 ```bash
 npm install
-npm run build       # Build all packages
 npm run typecheck   # Type-check all packages
+npm test            # Run tests
 ```
 
-## Examples
+## Network details
 
-| Example | Description |
-|---------|-------------|
-| `examples/demo-api` | Express API with x402 paywall |
-| `examples/scheme-plugin` | Full @x402/core plugin flow |
-| `examples/standalone-e2e` | HTTP E2E test with real servers |
-| `examples/hybrid-interop` | Cross-compatibility between standalone and plugin modes |
+| Property | Value |
+|----------|-------|
+| Chain name | Thanos Sepolia |
+| Chain ID | `111551119090` |
+| CAIP-2 | `eip155:111551119090` |
+| Native token | TON |
+| USDC address | `0x4200000000000000000000000000000000000778` |
+| USDC standard | FiatTokenV2_2 (EIP-3009 `transferWithAuthorization`) |
+| RPC | `https://rpc.thanos-sepolia.tokamak.network` |
+| Explorer | `https://explorer.thanos-sepolia.tokamak.network` |
 
-## Packages
+## Related
 
-- [`@x402-ton/common`](packages/common/README.md) -- Types, chain config, ABI
-- [`@x402-ton/client`](packages/client/README.md) -- Client signing and deposit
-- [`@x402-ton/server`](packages/server/README.md) -- Express payment middleware
-- [`@x402-ton/facilitator`](packages/facilitator/README.md) -- On-chain verification and settlement
-- [`@x402-ton/scheme`](packages/scheme/README.md) -- @x402/core plugin adapters
-- [`@x402-ton/mcp`](packages/mcp/README.md) -- MCP server for AI agents
-- [`@x402-ton/cli`](packages/cli/README.md) -- CLI tool
+- [x402 protocol](https://github.com/coinbase/x402) — the base protocol by Coinbase
+- [Tokamak Network](https://tokamak.network) — L2 scaling for Ethereum
+- [EIP-3009](https://eips.ethereum.org/EIPS/eip-3009) — Transfer With Authorization
 
 ## License
 

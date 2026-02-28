@@ -1,6 +1,6 @@
 # @x402-ton/cli
 
-Command-line tool for interacting with x402-ton: check balances, deposit TON into the facilitator, and pay for x402-protected API endpoints.
+Command-line tool for interacting with x402-ton on Tokamak Network's Thanos L2. Check USDC balances and pay for x402-protected API endpoints.
 
 ## Installation
 
@@ -10,53 +10,59 @@ npm install -g @x402-ton/cli
 
 ## Environment variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PRIVATE_KEY` | yes | -- | Hex-encoded private key (with `0x` prefix) |
-| `FACILITATOR_CONTRACT` | no | `0x0af530d6d66947aD930a7d1De60E58c43D40a308` | Override facilitator contract address |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PRIVATE_KEY` | yes | Hex-encoded private key with `0x` prefix |
 
 ## Commands
 
-### balance
+### `balance`
 
-Displays the facilitator deposit balance and native wallet balance.
+Displays USDC and native TON balances for the configured wallet.
 
 ```bash
 PRIVATE_KEY=0x... x402-ton balance
 ```
 
-Output:
 ```
-Facilitator balance: 1.5 TON
-Wallet balance: 9.2 TON
+Address: 0x1234...abcd
+USDC balance: 10.50 USDC
+Native balance: 9.2 TON
 ```
 
-### deposit
+### `pay <url>`
 
-Deposits TON from the wallet into the facilitator contract.
+Fetches a URL with automatic x402 payment handling. If the endpoint returns HTTP 402, the CLI:
+1. Decodes the `payment-required` header
+2. Signs an EIP-3009 `TransferWithAuthorization`
+3. Retries the request with the `payment-signature` header
+4. Prints the response
 
 ```bash
-PRIVATE_KEY=0x... x402-ton deposit 1.0
+PRIVATE_KEY=0x... x402-ton pay http://localhost:4403/api/plasma
 ```
 
-Output:
 ```
-Depositing 1.0 TON...
-TX: 0xabc...
-```
-
-### pay
-
-Fetches a URL with automatic x402 payment handling. If the endpoint returns HTTP 402, the CLI signs an EIP-712 authorization, retries with the payment header, and prints the response. Auto-deposits if the facilitator balance is insufficient.
-
-```bash
-PRIVATE_KEY=0x... x402-ton pay http://localhost:3000/api/weather
-```
-
-Output:
-```
-Fetching http://localhost:3000/api/weather...
+Fetching http://localhost:4403/api/plasma...
 Payment TX: 0xdef...
 Status: 200
-{"temp":"42C","payer":"0x..."}
+{"operator":"thanos-sepolia-sequencer","epoch":42,"throughput":"1800 tx/s"}
+```
+
+If the endpoint doesn't require payment, the CLI returns the response directly without signing.
+
+## Examples
+
+```bash
+# Check your wallet before paying
+PRIVATE_KEY=0x... x402-ton balance
+
+# Pay for plasma state data ($0.10 USDC)
+PRIVATE_KEY=0x... x402-ton pay http://localhost:4403/api/plasma
+
+# Pay for fusion telemetry ($0.001 USDC)
+PRIVATE_KEY=0x... x402-ton pay http://localhost:4403/api/fusion
+
+# Free endpoint — no payment needed
+PRIVATE_KEY=0x... x402-ton pay http://localhost:4403/api/health
 ```

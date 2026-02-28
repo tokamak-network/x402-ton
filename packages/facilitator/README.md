@@ -1,6 +1,6 @@
 # @x402-ton/facilitator
 
-On-chain payment verification and settlement for the x402-ton protocol. Includes an HTTP server and programmatic API.
+On-chain USDC payment verification and settlement for the x402-ton protocol on Tokamak Network's Thanos L2. Verifies EIP-3009 `TransferWithAuthorization` signatures and calls the USDC contract to settle payments.
 
 ## Installation
 
@@ -11,97 +11,139 @@ npm install @x402-ton/facilitator @x402-ton/common express viem
 ## Running the facilitator server
 
 ```bash
-FACILITATOR_PRIVATE_KEY=0x... \
-FACILITATOR_CONTRACT=0x0af530d6d66947aD930a7d1De60E58c43D40a308 \
-FACILITATOR_PORT=4402 \
-npm start
+FACILITATOR_PRIVATE_KEY=0x... npm start
 ```
 
 Or programmatically:
 
-```ts
+```typescript
 import { createFacilitatorServer } from "@x402-ton/facilitator";
 
-const app = createFacilitatorServer({
-  privateKey: "0x...",
-  facilitatorAddress: "0x0af530d6d66947aD930a7d1De60E58c43D40a308",
-});
-
-app.listen(4402);
+const app = createFacilitatorServer({ privateKey: "0x..." });
+app.listen(4402, () => console.log("Facilitator on :4402"));
 ```
 
 ## Environment variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FACILITATOR_PRIVATE_KEY` | yes | -- | Private key for the settlement wallet |
-| `FACILITATOR_CONTRACT` | yes | -- | TonPaymentFacilitator contract address |
+| `FACILITATOR_PRIVATE_KEY` | yes | — | Private key for the settlement wallet |
 | `FACILITATOR_PORT` | no | `4402` | HTTP server port |
 
-The private key is used to send `settle()` transactions on-chain. For gasless settlement, it also signs ERC-4337 UserOp paymaster data.
+The private key is used to submit `transferWithAuthorization` transactions. The facilitator pays gas for settlement — the payer only signs an off-chain authorization.
 
 ## API endpoints
 
-### POST /verify
+### `POST /verify`
 
-Verifies an EIP-712 payment authorization on-chain without executing it.
+Verifies an EIP-3009 payment authorization without touching the chain. Checks:
+- EIP-712 signature validity
+- Authorization amount >= required amount
+- Recipient matches `payTo`
+- Not expired (`validBefore` > now + 6s buffer)
+- Not premature (`validAfter` <= now)
+- Payer has sufficient USDC balance
 
-Request body: `{ paymentPayload, paymentRequirements }`
+**Request:**
+```json
+{
+  "x402Version": 2,
+  "paymentPayload": { "..." },
+  "paymentRequirements": { "..." }
+}
+```
 
-Response: `{ isValid: boolean, invalidReason?: string, payer?: string }`
+**Response:**
+```json
+{ "isValid": true, "payer": "0x..." }
+```
 
-### POST /settle
+Or on failure:
+```json
+{ "isValid": false, "invalidReason": "Insufficient USDC balance" }
+```
 
-Settles a payment by calling `TonPaymentFacilitator.settle()` on-chain. Moves funds from the payer's deposit to the recipient.
+### `POST /settle`
 
-Request body: `{ paymentPayload, paymentRequirements }`
+Settles a payment by calling `USDC.transferWithAuthorization()` on-chain. Re-verifies before settling. Moves USDC directly from payer to recipient.
 
-Response: `{ success: boolean, payer?: string, transaction?: string, network: string, errorReason?: string }`
+**Request:** Same as `/verify`.
 
-### POST /settle-gasless
+**Response:**
+```json
+{
+  "success": true,
+  "payer": "0x...",
+  "transaction": "0x...",
+  "network": "eip155:111551119090"
+}
+```
 
-Settles via ERC-4337 UserOperation with gas sponsored by DustPaymaster. Same request/response format as `/settle`. Automatically tops up the paymaster's EntryPoint deposit if it falls below 0.1 TON.
+### `GET /supported`
 
-### GET /health
+Returns supported payment kinds for client/server discovery.
 
-Returns `{ status: "ok", address: "0x..." }` with the settlement wallet address.
+**Response:**
+```json
+{
+  "kinds": [{
+    "x402Version": 2,
+    "scheme": "exact",
+    "network": "eip155:111551119090",
+    "extra": { "name": "Bridged USDC (Tokamak Network)", "version": "2" }
+  }],
+  "extensions": [],
+  "signers": { "eip155:111551119090": ["0x..."] }
+}
+```
+
+### `GET /health`
+
+Returns `{ "status": "ok", "address": "0x..." }` with the settlement wallet address.
 
 ## Programmatic API
 
-```ts
+Use the verification and settlement functions directly without the HTTP server:
+
+```typescript
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { thanosSepolia, CONTRACTS } from "@x402-ton/common";
-import { verifyPayment, settlePayment, settleGasless } from "@x402-ton/facilitator";
+import { thanosSepolia } from "@x402-ton/common";
+import { verifyPayment, settlePayment } from "@x402-ton/facilitator";
 
 const account = privateKeyToAccount("0x...");
 const publicClient = createPublicClient({ chain: thanosSepolia, transport: http() });
 const walletClient = createWalletClient({ account, chain: thanosSepolia, transport: http() });
 
-// Verify a payment (read-only, no gas)
-const verifyResult = await verifyPayment(publicClient, CONTRACTS.facilitator, {
+// Verify (off-chain only — checks signature + balance)
+const verification = await verifyPayment(publicClient, {
+  x402Version: 2,
   paymentPayload,
   paymentRequirements,
 });
 
-// Settle a payment (sends transaction)
-const settleResult = await settlePayment(
-  publicClient, walletClient, CONTRACTS.facilitator,
-  { paymentPayload, paymentRequirements }
-);
-
-// Settle via ERC-4337 (gas sponsored)
-const gaslessResult = await settleGasless(
-  publicClient, walletClient, CONTRACTS.facilitator,
-  { paymentPayload, paymentRequirements }
-);
+if (verification.isValid) {
+  // Settle (on-chain — calls transferWithAuthorization)
+  const settlement = await settlePayment(publicClient, walletClient, {
+    x402Version: 2,
+    paymentPayload,
+    paymentRequirements,
+  });
+  console.log("TX:", settlement.transaction);
+}
 ```
 
 ## Exports
 
 | Export | Description |
 |--------|-------------|
-| `createFacilitatorServer(config)` | Creates an Express app with /verify, /settle, /settle-gasless, /health |
-| `verifyPayment(publicClient, address, request)` | Verify payment on-chain (view call) |
-| `settlePayment(publicClient, walletClient, address, request)` | Settle payment (transaction) |
-| `settleGasless(publicClient, walletClient, address, request)` | Settle via ERC-4337 UserOp |
+| `createFacilitatorServer(config)` | Creates an Express app with /verify, /settle, /supported, /health |
+| `verifyPayment(publicClient, request)` | Verify EIP-3009 signature + USDC balance |
+| `settlePayment(publicClient, walletClient, request)` | Settle via USDC `transferWithAuthorization` |
+
+## Security considerations
+
+- The facilitator private key pays gas for settlement transactions. Fund it with TON for gas.
+- The facilitator never holds USDC — funds move directly from payer to the `payTo` address.
+- Settlement re-verifies before executing to prevent replay or stale authorizations.
+- Transaction receipt timeout is derived from `maxTimeoutSeconds` in the payment requirements.
