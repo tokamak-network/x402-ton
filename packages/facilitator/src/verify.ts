@@ -1,43 +1,71 @@
-import { type PublicClient } from "viem";
-import { type VerifyRequest, type VerifyResponse, FACILITATOR_ABI } from "@x402-ton/common";
+import { type PublicClient, verifyTypedData, getAddress } from "viem";
+import {
+  type VerifyRequest,
+  type VerifyResponse,
+  USDC_ABI,
+  TRANSFER_WITH_AUTHORIZATION_TYPES,
+  getUsdcDomain,
+} from "@x402-ton/common";
 
 export async function verifyPayment(
   publicClient: PublicClient,
-  facilitatorAddress: `0x${string}`,
-  request: VerifyRequest
+  request: VerifyRequest,
 ): Promise<VerifyResponse> {
   const { authorization, signature } = request.paymentPayload.payload;
   const requirement = request.paymentRequirements;
 
-  if (BigInt(authorization.amount) < BigInt(requirement.maxAmountRequired)) {
-    return { isValid: false, invalidReason: "Amount too low" };
+  if (BigInt(authorization.value) < BigInt(requirement.amount)) {
+    return { isValid: false, invalidReason: "Authorization amount below required amount" };
   }
 
-  if (authorization.to.toLowerCase() !== requirement.payTo.toLowerCase()) {
-    return { isValid: false, invalidReason: "Wrong recipient" };
+  if (getAddress(authorization.to) !== getAddress(requirement.payTo)) {
+    return { isValid: false, invalidReason: "Authorization recipient does not match payTo" };
   }
 
-  const result = await publicClient.readContract({
-    address: facilitatorAddress,
-    abi: FACILITATOR_ABI,
-    functionName: "verify",
-    args: [
-      authorization.from,
-      authorization.to,
-      BigInt(authorization.amount),
-      BigInt(authorization.deadline),
-      authorization.nonce,
-      signature,
-    ],
+  const now = Math.floor(Date.now() / 1000);
+
+  // 6-second buffer for block propagation delay
+  if (BigInt(authorization.validBefore) <= BigInt(now + 6)) {
+    return { isValid: false, invalidReason: "Authorization expires too soon" };
+  }
+
+  if (BigInt(authorization.validAfter) > BigInt(now)) {
+    return { isValid: false, invalidReason: "Authorization not yet valid" };
+  }
+
+  const chainId = Number(requirement.network.split(":")[1]);
+  const domain = getUsdcDomain(requirement.asset, chainId, requirement.extra);
+
+  const valid = await verifyTypedData({
+    address: authorization.from,
+    domain,
+    types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+    primaryType: "TransferWithAuthorization",
+    message: {
+      from: authorization.from,
+      to: authorization.to,
+      value: BigInt(authorization.value),
+      validAfter: BigInt(authorization.validAfter),
+      validBefore: BigInt(authorization.validBefore),
+      nonce: authorization.nonce,
+    },
+    signature,
   });
-  if (!Array.isArray(result) || result.length < 2 || typeof result[0] !== "boolean" || typeof result[1] !== "string") {
-    throw new Error("Unexpected return type from verify");
-  }
-  const [valid, reason] = result as [boolean, string];
 
-  return {
-    isValid: valid,
-    invalidReason: valid ? undefined : reason,
-    payer: valid ? authorization.from : undefined,
-  };
+  if (!valid) {
+    return { isValid: false, invalidReason: "Invalid EIP-712 signature" };
+  }
+
+  const balance = await publicClient.readContract({
+    address: requirement.asset,
+    abi: USDC_ABI,
+    functionName: "balanceOf",
+    args: [authorization.from],
+  });
+
+  if (balance < BigInt(requirement.amount)) {
+    return { isValid: false, invalidReason: "Insufficient USDC balance" };
+  }
+
+  return { isValid: true, payer: authorization.from };
 }

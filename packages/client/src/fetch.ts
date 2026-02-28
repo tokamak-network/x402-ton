@@ -1,28 +1,12 @@
-import {
-  type LocalAccount,
-  type PublicClient,
-  type WalletClient,
-} from "viem";
+import { type LocalAccount } from "viem";
 import { type PaymentRequired } from "@x402-ton/common";
-import { signPayment, type SignerConfig } from "./signer.js";
-import { ensureBalance } from "./deposit.js";
+import { signPayment } from "./signer.js";
 
-export interface X402TonClientConfig {
+export interface X402ClientConfig {
   account: LocalAccount;
-  publicClient: PublicClient;
-  walletClient: WalletClient;
-  facilitatorAddress?: `0x${string}`;
-  chainId?: number;
-  autoDeposit?: boolean;
 }
 
-export function createX402TonFetch(config: X402TonClientConfig) {
-  const signerConfig: SignerConfig = {
-    account: config.account,
-    facilitatorAddress: config.facilitatorAddress,
-    chainId: config.chainId,
-  };
-
+export function createX402Fetch(config: X402ClientConfig) {
   return async function x402Fetch(
     input: RequestInfo | URL,
     init?: RequestInit
@@ -31,36 +15,20 @@ export function createX402TonFetch(config: X402TonClientConfig) {
 
     if (response.status !== 402) return response;
 
-    const paymentRequiredHeader = response.headers.get("payment-required");
-    if (!paymentRequiredHeader) return response;
+    const header = response.headers.get("payment-required");
+    if (!header) return response;
 
-    let paymentRequired: PaymentRequired;
-    try {
-      paymentRequired = JSON.parse(atob(paymentRequiredHeader));
-    } catch {
-      throw new Error("Invalid payment-required header: malformed base64 or JSON");
-    }
-
-    if (!Array.isArray(paymentRequired.accepts)) {
-      throw new Error("Invalid payment-required header: missing accepts array");
-    }
+    const paymentRequired: PaymentRequired = JSON.parse(
+      Buffer.from(header, "base64").toString("utf-8")
+    );
 
     const requirement = paymentRequired.accepts.find(
-      (r) => r.scheme === "exact-ton"
+      (r) => r.scheme === "exact"
     );
     if (!requirement) return response;
 
-    if (config.autoDeposit) {
-      await ensureBalance(
-        config.publicClient,
-        config.walletClient,
-        BigInt(requirement.maxAmountRequired),
-        config.facilitatorAddress
-      );
-    }
-
-    const payload = await signPayment(signerConfig, requirement);
-    const paymentHeader = btoa(JSON.stringify(payload));
+    const payload = await signPayment(config.account, requirement);
+    const paymentHeader = Buffer.from(JSON.stringify(payload)).toString("base64");
 
     return fetch(input, {
       ...init,

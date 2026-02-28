@@ -1,3 +1,2 @@
-export { signPayment, type SignerConfig } from "./signer.js";
-export { getBalance, deposit, withdraw, ensureBalance } from "./deposit.js";
-export { createX402TonFetch, type X402TonClientConfig } from "./fetch.js";
+export { signPayment } from "./signer.js";
+export { createX402Fetch, type X402ClientConfig } from "./fetch.js";

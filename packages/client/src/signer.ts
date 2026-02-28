@@ -1,56 +1,54 @@
-import { type LocalAccount } from "viem";
+import { type LocalAccount, getAddress, toHex } from "viem";
 import {
-  type PaymentAuthorization,
+  type PaymentRequirements,
   type PaymentPayload,
-  type PaymentRequirement,
-  PAYMENT_AUTH_TYPES,
-  getFacilitatorDomain,
-  CONTRACTS,
-  thanosSepolia,
+  type TransferAuthorization,
+  TRANSFER_WITH_AUTHORIZATION_TYPES,
 } from "@x402-ton/common";
 
-export interface SignerConfig {
-  account: LocalAccount;
-  facilitatorAddress?: `0x${string}`;
-  chainId?: number;
-}
-
 export async function signPayment(
-  config: SignerConfig,
-  requirement: PaymentRequirement
+  account: LocalAccount,
+  requirement: PaymentRequirements
 ): Promise<PaymentPayload> {
-  const facilitatorAddr = config.facilitatorAddress ?? CONTRACTS.facilitator;
-  const chainId = config.chainId ?? thanosSepolia.id;
+  const chainId = Number(requirement.network.split(":")[1]);
+  const now = Math.floor(Date.now() / 1000);
 
-  const nonce = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("")}` as `0x${string}`;
-  const deadline = String(Math.floor(Date.now() / 1000) + requirement.maxTimeoutSeconds);
+  // 10 min clock skew tolerance, matches coinbase/x402
+  const validAfter = String(now - 600);
+  const validBefore = String(now + requirement.maxTimeoutSeconds);
+  const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
 
-  const domain = getFacilitatorDomain(facilitatorAddr, chainId);
-
-  const authorization: PaymentAuthorization = {
-    from: config.account.address,
-    to: requirement.payTo,
-    amount: requirement.maxAmountRequired,
-    deadline,
+  const authorization: TransferAuthorization = {
+    from: getAddress(account.address),
+    to: getAddress(requirement.payTo),
+    value: requirement.amount,
+    validAfter,
+    validBefore,
     nonce,
   };
 
-  const signature = await config.account.signTypedData({
-    domain,
-    types: PAYMENT_AUTH_TYPES,
-    primaryType: "PaymentAuth",
+  const signature = await account.signTypedData({
+    domain: {
+      name: (requirement.extra?.name as string) ?? "Bridged USDC (Tokamak Network)",
+      version: (requirement.extra?.version as string) ?? "2",
+      chainId: BigInt(chainId),
+      verifyingContract: getAddress(requirement.asset),
+    },
+    types: TRANSFER_WITH_AUTHORIZATION_TYPES,
+    primaryType: "TransferWithAuthorization",
     message: {
       from: authorization.from,
       to: authorization.to,
-      amount: BigInt(authorization.amount),
-      deadline: BigInt(authorization.deadline),
+      value: BigInt(authorization.value),
+      validAfter: BigInt(authorization.validAfter),
+      validBefore: BigInt(authorization.validBefore),
       nonce: authorization.nonce,
     },
   });
 
   return {
     x402Version: 2,
-    scheme: "exact-ton",
+    scheme: "exact",
     network: requirement.network,
     payload: { signature, authorization },
   };
