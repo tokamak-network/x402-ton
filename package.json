@@ -4,7 +4,8 @@
   "packageManager": "npm@10.8.2",
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/clients/*",
+    "examples/servers/*"
   ],
   "scripts": {
     "build": "turbo build",
@@ -14,7 +15,8 @@
     "test:watch": "vitest",
     "version": "changeset version",
     "publish": "turbo build && changeset publish",
-    "release": "npm run build && changeset publish"
+    "release": "npm run build && changeset publish",
+    "fund-testnet": "node --import=tsx scripts/fund-testnet.ts"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
