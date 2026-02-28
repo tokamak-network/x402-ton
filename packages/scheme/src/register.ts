@@ -5,9 +5,6 @@ import { ExactTonClient } from "./client.js";
 import { ExactTonFacilitator, type ExactTonFacilitatorConfig } from "./facilitator.js";
 import { ExactTonServer } from "./server.js";
 
-// Structural types matching the actual x402 framework .register() signatures.
-// x402Client and x402ResourceServer accept a single Network,
-// x402Facilitator accepts Network | Network[].
 interface SingleNetworkRegistrable<T> {
   register(network: Network, scheme: T): unknown;
 }
@@ -18,7 +15,6 @@ interface MultiNetworkRegistrable<T> {
 
 export interface TonClientConfig {
   account: LocalAccount;
-  facilitatorAddress?: `0x${string}`;
   network?: Network;
 }
 
@@ -27,13 +23,12 @@ export function registerExactTonScheme(
   config: TonClientConfig,
 ): void {
   const network = config.network ?? (CAIP2_THANOS_SEPOLIA as Network);
-  client.register(network, new ExactTonClient(config.account, config.facilitatorAddress));
+  client.register(network, new ExactTonClient(config.account));
 }
 
 export interface TonFacilitatorConfig {
   publicClient: PublicClient;
   walletClient: WalletClient<Transport, Chain, Account>;
-  facilitatorAddress?: `0x${string}`;
   networks?: Network[];
 }
 
@@ -45,7 +40,6 @@ export function registerExactTonFacilitator(
   const facConfig: ExactTonFacilitatorConfig = {
     publicClient: config.publicClient,
     walletClient: config.walletClient,
-    facilitatorAddress: config.facilitatorAddress,
   };
   facilitator.register(networks, new ExactTonFacilitator(facConfig));
 }

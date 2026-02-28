@@ -3,37 +3,27 @@ import type {
   PaymentPayload as CorePayload,
 } from "@x402/core/types";
 import type {
-  PaymentRequirement,
+  PaymentRequirements,
   PaymentPayload,
-  PaymentAuthorization,
+  TransferAuthorization,
   VerifyRequest,
   SettleRequest,
 } from "@x402-ton/common";
-import { getAddress } from "viem";
 
-/**
- * @x402/core uses scheme:"exact", amount, and extra bag.
- * Internal uses scheme:"exact-ton", maxAmountRequired, and inline resource/description/mimeType.
- */
-export function toInternalRequirement(coreReq: CoreRequirements): PaymentRequirement {
-  let payTo: `0x${string}`;
-  try {
-    payTo = getAddress(coreReq.payTo) as `0x${string}`;
-  } catch {
-    throw new Error(`Invalid payTo address: ${coreReq.payTo}`);
+export function toInternalRequirement(coreReq: CoreRequirements): PaymentRequirements {
+  const payTo = coreReq.payTo;
+  if (!payTo.startsWith("0x")) {
+    throw new Error(`Invalid payTo address: ${payTo}`);
   }
 
   return {
-    scheme: "exact-ton",
+    scheme: "exact",
     network: coreReq.network,
-    maxAmountRequired: coreReq.amount,
-    resource: typeof coreReq.extra?.resource === "string" ? coreReq.extra.resource : "",
-    description: typeof coreReq.extra?.description === "string" ? coreReq.extra.description : "",
-    mimeType: typeof coreReq.extra?.mimeType === "string" ? coreReq.extra.mimeType : "application/json",
-    payTo,
+    amount: coreReq.amount,
+    payTo: payTo as `0x${string}`,
+    asset: coreReq.asset as `0x${string}`,
     maxTimeoutSeconds: coreReq.maxTimeoutSeconds,
-    asset: "native",
-    extra: coreReq.extra,
+    extra: coreReq.extra ?? {},
   };
 }
 
@@ -47,12 +37,12 @@ function toInternalPayload(corePayload: CorePayload): PaymentPayload {
     throw new Error("Missing or invalid payload.authorization");
   }
 
-  const authorization = payload.authorization as PaymentAuthorization;
+  const authorization = payload.authorization as TransferAuthorization;
   const signature = payload.signature as `0x${string}`;
 
   return {
-    x402Version: corePayload.x402Version as 2,
-    scheme: "exact-ton",
+    x402Version: corePayload.x402Version,
+    scheme: "exact",
     network: corePayload.accepted.network,
     payload: { signature, authorization },
   };
@@ -63,6 +53,7 @@ export function toInternalVerifyRequest(
   coreReq: CoreRequirements,
 ): VerifyRequest {
   return {
+    x402Version: corePayload.x402Version,
     paymentPayload: toInternalPayload(corePayload),
     paymentRequirements: toInternalRequirement(coreReq),
   };
@@ -73,15 +64,12 @@ export function toInternalSettleRequest(
   coreReq: CoreRequirements,
 ): SettleRequest {
   return {
+    x402Version: corePayload.x402Version,
     paymentPayload: toInternalPayload(corePayload),
     paymentRequirements: toInternalRequirement(coreReq),
   };
 }
 
-/**
- * Extracts typed internal PaymentPayload fields into the @x402/core
- * Record<string,unknown> shape for PaymentPayloadResult.payload.
- */
 export function toPayloadResult(
   internal: PaymentPayload,
 ): Record<string, unknown> {

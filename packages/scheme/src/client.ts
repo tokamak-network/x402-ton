@@ -5,16 +5,16 @@ import type {
   PaymentPayloadResult,
   PaymentPayloadContext,
 } from "@x402/core/types";
-import { signPayment, type SignerConfig } from "@x402-ton/client";
+import { signPayment } from "@x402-ton/client";
 import { toInternalRequirement, toPayloadResult } from "./types.js";
 
 export class ExactTonClient implements SchemeNetworkClient {
   readonly scheme = "exact";
 
-  private readonly signerConfig: SignerConfig;
+  private readonly account: LocalAccount;
 
-  constructor(account: LocalAccount, facilitatorAddress?: `0x${string}`) {
-    this.signerConfig = { account, facilitatorAddress };
+  constructor(account: LocalAccount) {
+    this.account = account;
   }
 
   async createPaymentPayload(
@@ -23,7 +23,7 @@ export class ExactTonClient implements SchemeNetworkClient {
     _context?: PaymentPayloadContext,
   ): Promise<PaymentPayloadResult> {
     const internalReq = toInternalRequirement(requirements);
-    const internalPayload = await signPayment(this.signerConfig, internalReq);
+    const internalPayload = await signPayment(this.account, internalReq);
 
     return {
       x402Version,
