@@ -1,42 +1,43 @@
-export interface PaymentRequirement {
-  scheme: "exact-ton";
-  network: string;
-  maxAmountRequired: string;
-  resource: string;
-  description: string;
-  mimeType: string;
+export type Network = `${string}:${string}`;
+
+export interface PaymentRequirements {
+  scheme: "exact";
+  network: Network;
+  asset: `0x${string}`;
+  amount: string;
   payTo: `0x${string}`;
   maxTimeoutSeconds: number;
-  asset: "native";
-  extra?: Record<string, unknown>;
+  extra: Record<string, unknown>;
 }
 
 export interface PaymentRequired {
-  version: 2;
-  accepts: PaymentRequirement[];
+  x402Version: number;
+  accepts: PaymentRequirements[];
 }
 
-export interface PaymentAuthorization {
+export interface TransferAuthorization {
   from: `0x${string}`;
   to: `0x${string}`;
-  amount: string;
-  deadline: string;
+  value: string;
+  validAfter: string;
+  validBefore: string;
   nonce: `0x${string}`;
 }
 
 export interface PaymentPayload {
-  x402Version: 2;
-  scheme: "exact-ton";
-  network: string;
+  x402Version: number;
+  scheme: "exact";
+  network: Network;
   payload: {
     signature: `0x${string}`;
-    authorization: PaymentAuthorization;
+    authorization: TransferAuthorization;
   };
 }
 
 export interface VerifyRequest {
+  x402Version: number;
   paymentPayload: PaymentPayload;
-  paymentRequirements: PaymentRequirement;
+  paymentRequirements: PaymentRequirements;
 }
 
 export interface VerifyResponse {
@@ -46,14 +47,15 @@ export interface VerifyResponse {
 }
 
 export interface SettleRequest {
+  x402Version: number;
   paymentPayload: PaymentPayload;
-  paymentRequirements: PaymentRequirement;
+  paymentRequirements: PaymentRequirements;
 }
 
 export interface SettlementResponse {
   success: boolean;
   payer?: `0x${string}`;
   transaction?: `0x${string}`;
-  network: string;
+  network: Network;
   errorReason?: string;
 }

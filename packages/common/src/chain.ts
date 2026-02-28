@@ -52,3 +52,5 @@ export const CONTRACTS = {
     "ACCOUNT_FACTORY_CONTRACT",
   ),
 };
+
+export const THANOS_USDC = (process.env.USDC_ADDRESS ?? "0x4200000000000000000000000000000000000778") as `0x${string}`;
