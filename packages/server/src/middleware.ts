@@ -35,7 +35,7 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function matchRoute(
+export function matchRoute(
   method: string,
   path: string,
   routes: Record<string, RouteConfig>

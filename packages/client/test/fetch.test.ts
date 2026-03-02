@@ -5,39 +5,25 @@ vi.mock("../src/signer.js", () => ({
   signPayment: vi.fn(),
 }));
 
-vi.mock("../src/deposit.js", () => ({
-  ensureBalance: vi.fn().mockResolvedValue(null),
-}));
-
-import { createX402TonFetch } from "../src/fetch.js";
+import { createX402Fetch } from "../src/fetch.js";
 import { signPayment } from "../src/signer.js";
-import { ensureBalance } from "../src/deposit.js";
 
 function mockAccount() {
-  return { address: "0xaaaa" } as Parameters<typeof createX402TonFetch>[0]["account"];
-}
-
-function mockClients() {
-  return {
-    publicClient: {} as Parameters<typeof createX402TonFetch>[0]["publicClient"],
-    walletClient: {} as Parameters<typeof createX402TonFetch>[0]["walletClient"],
-  };
+  return { address: "0xaaaa" } as Parameters<typeof createX402Fetch>[0]["account"];
 }
 
 function makePaymentRequired(): PaymentRequired {
   return {
-    version: 2,
+    x402Version: 2,
     accepts: [
       {
-        scheme: "exact-ton",
+        scheme: "exact",
         network: "eip155:111551119090",
-        maxAmountRequired: "1000",
-        resource: "https://example.com/api",
-        description: "test",
-        mimeType: "application/json",
-        payTo: "0xbbbb" as `0x${string}`,
+        asset: "0x4200000000000000000000000000000000000778" as `0x${string}`,
+        amount: "1000000",
+        payTo: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as `0x${string}`,
         maxTimeoutSeconds: 60,
-        asset: "native",
+        extra: { name: "Bridged USDC (Tokamak Network)", version: "2" },
       },
     ],
   };
@@ -49,21 +35,22 @@ function encodePaymentRequired(pr: PaymentRequired): string {
 
 const MOCK_PAYLOAD: PaymentPayload = {
   x402Version: 2,
-  scheme: "exact-ton",
+  scheme: "exact",
   network: "eip155:111551119090",
   payload: {
     signature: "0xdeadbeef" as `0x${string}`,
     authorization: {
       from: "0xaaaa" as `0x${string}`,
       to: "0xbbbb" as `0x${string}`,
-      amount: "1000",
-      deadline: "9999999999",
+      value: "1000000",
+      validAfter: "0",
+      validBefore: "9999999999",
       nonce: "0x0000000000000000000000000000000000000000000000000000000000000001" as `0x${string}`,
     },
   },
 };
 
-describe("createX402TonFetch", () => {
+describe("createX402Fetch", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
@@ -73,13 +60,10 @@ describe("createX402TonFetch", () => {
 
   it("returns a function", () => {
     // #given
-    const config = {
-      account: mockAccount(),
-      ...mockClients(),
-    };
+    const config = { account: mockAccount() };
 
     // #when
-    const x402Fetch = createX402TonFetch(config);
+    const x402Fetch = createX402Fetch(config);
 
     // #then
     expect(typeof x402Fetch).toBe("function");
@@ -89,7 +73,7 @@ describe("createX402TonFetch", () => {
     // #given
     const okResponse = new Response(JSON.stringify({ data: "ok" }), { status: 200 });
     globalThis.fetch = vi.fn().mockResolvedValue(okResponse);
-    const x402Fetch = createX402TonFetch({ account: mockAccount(), ...mockClients() });
+    const x402Fetch = createX402Fetch({ account: mockAccount() });
 
     // #when
     const result = await x402Fetch("https://example.com/api");
@@ -111,7 +95,7 @@ describe("createX402TonFetch", () => {
 
     vi.mocked(signPayment).mockResolvedValue(MOCK_PAYLOAD);
 
-    const x402Fetch = createX402TonFetch({ account: mockAccount(), ...mockClients() });
+    const x402Fetch = createX402Fetch({ account: mockAccount() });
 
     // #when
     const result = await x402Fetch("https://example.com/api");
@@ -130,7 +114,7 @@ describe("createX402TonFetch", () => {
     // #given
     const response402 = new Response("Payment Required", { status: 402 });
     globalThis.fetch = vi.fn().mockResolvedValue(response402);
-    const x402Fetch = createX402TonFetch({ account: mockAccount(), ...mockClients() });
+    const x402Fetch = createX402Fetch({ account: mockAccount() });
 
     // #when
     const result = await x402Fetch("https://example.com/api");
@@ -141,31 +125,15 @@ describe("createX402TonFetch", () => {
     expect(signPayment).not.toHaveBeenCalled();
   });
 
-  it("returns original response when no exact-ton scheme in accepts", async () => {
+  it("returns original response when no exact scheme in accepts", async () => {
     // #given
-    const pr: PaymentRequired = {
-      version: 2,
-      accepts: [
-        {
-          scheme: "exact-ton",
-          network: "eip155:111551119090",
-          maxAmountRequired: "1000",
-          resource: "https://example.com/api",
-          description: "test",
-          mimeType: "application/json",
-          payTo: "0xbbbb" as `0x${string}`,
-          maxTimeoutSeconds: 60,
-          asset: "native",
-        },
-      ],
-    };
-    // Override scheme to something else to simulate no match
+    const pr = makePaymentRequired();
     (pr.accepts[0] as Record<string, unknown>).scheme = "other-scheme";
 
     const headers402 = new Headers({ "payment-required": encodePaymentRequired(pr) });
     const response402 = new Response("Payment Required", { status: 402, headers: headers402 });
     globalThis.fetch = vi.fn().mockResolvedValue(response402);
-    const x402Fetch = createX402TonFetch({ account: mockAccount(), ...mockClients() });
+    const x402Fetch = createX402Fetch({ account: mockAccount() });
 
     // #when
     const result = await x402Fetch("https://example.com/api");
@@ -176,39 +144,13 @@ describe("createX402TonFetch", () => {
   });
 
   it("throws on invalid base64 in payment-required header", async () => {
-    // #given — invalid base64 that will produce invalid JSON
+    // #given
     const headers402 = new Headers({ "payment-required": "!!!not-base64!!!" });
     const response402 = new Response("Payment Required", { status: 402, headers: headers402 });
     globalThis.fetch = vi.fn().mockResolvedValue(response402);
-    const x402Fetch = createX402TonFetch({ account: mockAccount(), ...mockClients() });
+    const x402Fetch = createX402Fetch({ account: mockAccount() });
 
     // #when / #then
     await expect(x402Fetch("https://example.com/api")).rejects.toThrow();
-  });
-
-  it("calls ensureBalance when autoDeposit is enabled", async () => {
-    // #given
-    const pr = makePaymentRequired();
-    const headers402 = new Headers({ "payment-required": encodePaymentRequired(pr) });
-    const response402 = new Response("Payment Required", { status: 402, headers: headers402 });
-    const paidResponse = new Response(JSON.stringify({ data: "paid" }), { status: 200 });
-    globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(response402)
-      .mockResolvedValueOnce(paidResponse);
-
-    vi.mocked(signPayment).mockResolvedValue(MOCK_PAYLOAD);
-    vi.mocked(ensureBalance).mockResolvedValue(null);
-
-    const x402Fetch = createX402TonFetch({
-      account: mockAccount(),
-      ...mockClients(),
-      autoDeposit: true,
-    });
-
-    // #when
-    await x402Fetch("https://example.com/api");
-
-    // #then
-    expect(ensureBalance).toHaveBeenCalledOnce();
   });
 });

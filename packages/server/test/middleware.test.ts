@@ -29,6 +29,15 @@ function mockRes(): Response {
       res._body = body;
       return res;
     },
+    write(_chunk: unknown, ..._args: unknown[]) {
+      return true;
+    },
+    end(_chunk?: unknown, ..._args: unknown[]) {
+      return res;
+    },
+    writeHead(_statusCode: number, ..._args: unknown[]) {
+      return res;
+    },
   };
   return res as unknown as Response;
 }
@@ -153,9 +162,9 @@ describe("paymentMiddleware", () => {
     const decoded = JSON.parse(
       Buffer.from(res._headers["payment-required"], "base64").toString("utf-8")
     );
-    expect(decoded.version).toBe(2);
+    expect(decoded.x402Version).toBe(2);
     expect(decoded.accepts).toHaveLength(1);
-    expect(decoded.accepts[0].scheme).toBe("exact-ton");
+    expect(decoded.accepts[0].scheme).toBe("exact");
   });
 
   it("returns 400 for invalid payment header (bad base64/JSON)", async () => {
@@ -269,15 +278,16 @@ describe("paymentMiddleware", () => {
     // #given
     const validPayload = Buffer.from(JSON.stringify({
       x402Version: 2,
-      scheme: "exact-ton",
+      scheme: "exact",
       network: "eip155:111551119090",
       payload: {
         signature: "0xdeadbeef",
         authorization: {
           from: "0xaaaa",
           to: "0xbbbb",
-          amount: "1000",
-          deadline: "9999999999",
+          value: "1000",
+          validAfter: "0",
+          validBefore: "9999999999",
           nonce: "0x0000000000000000000000000000000000000000000000000000000000000001",
         },
       },
@@ -287,7 +297,13 @@ describe("paymentMiddleware", () => {
       JSON.stringify({ isValid: true, payer: "0xaaaa" }),
       { status: 200, headers: { "Content-Type": "application/json" } }
     );
-    globalThis.fetch = vi.fn().mockResolvedValue(verifyResponse);
+    const settleResponse = new Response(
+      JSON.stringify({ success: true, transaction: "0xdeadbeef", network: "eip155:111551119090" }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(verifyResponse)
+      .mockResolvedValueOnce(settleResponse);
 
     const middleware = paymentMiddleware({
       routes: ROUTES,
@@ -299,7 +315,10 @@ describe("paymentMiddleware", () => {
       headers: { "payment-signature": validPayload },
     });
     const res = mockRes();
-    const next = vi.fn();
+    // Simulate a handler that writes a response body and calls end()
+    const next = vi.fn(() => {
+      res.end(JSON.stringify({ data: "ok" }));
+    });
 
     // #when
     await middleware(req, res, next);
