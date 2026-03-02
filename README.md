@@ -29,17 +29,79 @@ Client                    Server                   Facilitator
 
 ## Installation
 
+### Standalone (Thanos-only, no external dependencies)
+
 ```bash
-# Server packages (sell APIs)
+# Server — sell APIs
+npm install @x402-ton/server @x402-ton/facilitator
+
+# Client — buy APIs
+npm install @x402-ton/client viem
+```
+
+### Multi-chain (with Coinbase's @x402/core framework)
+
+Requires [`@x402/core`](https://github.com/coinbase/x402) — the base x402 framework by Coinbase. Use this when you need Thanos support alongside other chains (Base, Solana, etc.).
+
+```bash
+# Server
 npm install @x402-ton/facilitator @x402-ton/scheme @x402/express @x402/core
 
-# Client packages (buy APIs)
+# Client
 npm install @x402-ton/scheme @x402/fetch @x402/core viem
 ```
 
-## Quick start: Sell an API (server)
+## Quick start: Sell an API
 
-Uses `@x402/express` middleware with the Thanos Sepolia scheme registered. The self-hosted facilitator handles on-chain verification and settlement since CDP doesn't support Thanos yet.
+Three components: your Express app, the `@x402-ton/server` middleware, and a self-hosted facilitator (since CDP doesn't support Thanos yet).
+
+```typescript
+import express from "express";
+import { paymentMiddleware } from "@x402-ton/server";
+import { createFacilitatorServer } from "@x402-ton/facilitator";
+
+// 1. Start self-hosted facilitator
+const facilitatorKey = process.env.FACILITATOR_PRIVATE_KEY as `0x${string}`;
+createFacilitatorServer({ privateKey: facilitatorKey }).listen(4402);
+
+// 2. Express app with payment middleware
+const app = express();
+app.use(paymentMiddleware({
+  facilitatorUrl: "http://localhost:4402",
+  routes: {
+    "GET /api/plasma": {
+      price: "100000",  // $0.10 USDC (6 decimals)
+      payTo: "0xYourAddress" as `0x${string}`,
+    },
+  },
+}));
+
+app.get("/api/plasma", (req, res) => {
+  res.json({ payer: req.x402Payer, epoch: 42, throughput: "1800 tx/s" });
+});
+
+app.listen(4403);
+```
+
+## Quick start: Buy an API
+
+```typescript
+import { createX402Fetch } from "@x402-ton/client";
+import { privateKeyToAccount } from "viem/accounts";
+
+const x402Fetch = createX402Fetch({
+  account: privateKeyToAccount("0xYourPrivateKey" as `0x${string}`),
+});
+
+const res = await x402Fetch("http://localhost:4403/api/plasma");
+console.log(await res.json());
+```
+
+## Multi-chain usage (with @x402/core)
+
+For integrating Thanos alongside other chains using Coinbase's [`@x402/core`](https://github.com/coinbase/x402) framework. The `@x402-ton/scheme` package provides plugin adapters.
+
+### Server
 
 ```typescript
 import express from "express";
@@ -48,8 +110,8 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { registerExactTonServer } from "@x402-ton/scheme";
 import { createFacilitatorServer } from "@x402-ton/facilitator";
 
-// Self-hosted facilitator
-createFacilitatorServer({ privateKey: "0x..." }).listen(4402);
+// Self-hosted facilitator (CDP doesn't support Thanos yet)
+createFacilitatorServer({ privateKey: "0x..." as `0x${string}` }).listen(4402);
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: "http://localhost:4402" });
 const server = new x402ResourceServer(facilitatorClient);
@@ -75,9 +137,7 @@ app.get("/api/plasma", (_req, res) => {
 app.listen(4403);
 ```
 
-## Quick start: Buy an API (client)
-
-Uses `@x402/fetch` — wraps native `fetch` to automatically handle 402 responses.
+### Client
 
 ```typescript
 import { x402Client } from "@x402/core/client";
@@ -91,43 +151,6 @@ registerExactTonScheme(client, { account: privateKeyToAccount("0x...") });
 const fetchWithPayment = wrapFetchWithPayment(fetch, client);
 const res = await fetchWithPayment("http://localhost:4403/api/plasma");
 console.log(await res.json());
-```
-
-## Standalone usage (no @x402/core)
-
-For Thanos-only integrations without the multi-chain framework:
-
-### Server
-
-```typescript
-import express from "express";
-import { paymentMiddleware } from "@x402-ton/server";
-
-const app = express();
-app.use(paymentMiddleware({
-  facilitatorUrl: "http://localhost:4402",
-  routes: {
-    "GET /api/plasma": {
-      price: "100000", // $0.10 USDC (6 decimals)
-      payTo: "0xYourAddress",
-    },
-  },
-}));
-
-app.get("/api/plasma", (req, res) => {
-  res.json({ payer: req.x402Payer, data: "..." });
-});
-app.listen(4403);
-```
-
-### Client
-
-```typescript
-import { createX402Fetch } from "@x402-ton/client";
-import { privateKeyToAccount } from "viem/accounts";
-
-const x402Fetch = createX402Fetch({ account: privateKeyToAccount("0x...") });
-const res = await x402Fetch("http://localhost:4403/api/plasma");
 ```
 
 ## CLI
@@ -215,11 +238,13 @@ It checks your L2 balance, and if needed, bridges your L1 Sepolia USDC through t
 
 ## Examples
 
+The `examples/` directory shows the multi-chain integration using `@x402/core`:
+
 ### Server (sell APIs)
 
 ```bash
 cd examples/servers/express
-cp .env.example .env   # add your keys
+cp .env.example .env   # add FACILITATOR_PRIVATE_KEY and PAY_TO_ADDRESS
 npm start              # starts facilitator (:4402) + API (:4403)
 ```
 
@@ -229,7 +254,7 @@ Endpoints: `GET /api/plasma` ($0.10), `GET /api/fusion` ($0.001), `GET /api/heal
 
 ```bash
 cd examples/clients/fetch
-cp .env.example .env   # add payer private key
+cp .env.example .env   # add PRIVATE_KEY
 npm start              # hits paid endpoints with automatic x402 payment
 ```
 
@@ -270,8 +295,9 @@ npm start              # hits paid endpoints with automatic x402 payment
 
 ```bash
 npm install
-npm run typecheck   # Type-check all packages
-npm test            # Run tests
+npm run build           # Build all packages
+npm run typecheck       # Type-check all packages
+npm test                # Run tests
 ```
 
 ## Network details
